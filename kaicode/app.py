@@ -99,6 +99,134 @@ _HAS_TASK = re.compile(
     re.I,
 )
 
+def _sanitize_json_block(block: str) -> str:
+    """Escape raw control chars that appear inside JSON string values, so
+    json.loads accepts the not-quite-valid JSON that local models emit
+    (e.g. real newlines inside a 'content' field holding source code)."""
+    out: list[str] = []
+    in_str = False
+    esc = False
+    for c in block:
+        if in_str:
+            if esc:
+                out.append(c)
+                esc = False
+            elif c == "\\":
+                out.append(c)
+                esc = True
+            elif c == '"':
+                out.append(c)
+                in_str = False
+            elif c == "\n":
+                out.append("\\n")
+            elif c == "\r":
+                out.append("\\r")
+            elif c == "\t":
+                out.append("\\t")
+            else:
+                out.append(c)
+        else:
+            out.append(c)
+            if c == '"':
+                in_str = True
+    return "".join(out)
+
+
+def _extract_text_tool_calls(content: str, valid_names: set[str]) -> tuple[str, list[dict]]:
+    """Fallback: parse tool calls that a model emitted as JSON text instead of
+    using the native tool-calling channel (very common with local models).
+
+    Returns (cleaned_content, tool_calls). Each tool call is {id, name, input}.
+    """
+    if not content or "{" not in content:
+        return content, []
+
+    calls: list[dict] = []
+    spans: list[tuple[int, int]] = []
+
+    i = 0
+    n = len(content)
+    while i < n:
+        if content[i] != "{":
+            i += 1
+            continue
+        # Scan for a balanced {...} block (string-aware)
+        depth = 0
+        j = i
+        in_str = False
+        esc = False
+        while j < n:
+            c = content[j]
+            if in_str:
+                if esc:
+                    esc = False
+                elif c == "\\":
+                    esc = True
+                elif c == '"':
+                    in_str = False
+            else:
+                if c == '"':
+                    in_str = True
+                elif c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0:
+                        break
+            j += 1
+
+        if depth != 0:
+            break  # unbalanced — stop scanning
+
+        block = content[i:j + 1]
+        try:
+            import json as _json
+            obj = _json.loads(_sanitize_json_block(block))
+        except (ValueError, TypeError):
+            i += 1
+            continue
+
+        if isinstance(obj, dict):
+            name = obj.get("name") or obj.get("tool") or obj.get("function")
+            args = obj.get("arguments")
+            if args is None:
+                args = obj.get("parameters")
+            if args is None:
+                args = obj.get("input")
+            if isinstance(name, str) and name in valid_names:
+                if isinstance(args, str):
+                    try:
+                        import json as _json2
+                        args = _json2.loads(args)
+                    except (ValueError, TypeError):
+                        args = {}
+                if not isinstance(args, dict):
+                    args = {}
+                calls.append({
+                    "id": f"text_{len(calls)}_{abs(hash(name)) % 100000}",
+                    "name": name,
+                    "input": args,
+                })
+                spans.append((i, j + 1))
+        i = j + 1
+
+    # Strip the parsed JSON blocks from the visible content
+    if spans:
+        cleaned_parts = []
+        last = 0
+        for s, e in spans:
+            cleaned_parts.append(content[last:s])
+            last = e
+        cleaned_parts.append(content[last:])
+        cleaned = "".join(cleaned_parts)
+        # Tidy leftover fences/whitespace
+        cleaned = re.sub(r'```(?:json|tool_code)?\s*```', '', cleaned)
+        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned).strip()
+        return cleaned, calls
+
+    return content, []
+
+
 def _needs_tools(message: str) -> bool:
     msg = message.strip()
     if _HAS_TASK.search(msg):
@@ -402,6 +530,14 @@ class KaiApp:
                 self._tokens_used += tokens
                 self.session.add_tokens(tokens)
 
+            # ── Fallback: model emitted tool calls as JSON text, not natively ─
+            if not pending_tool_calls and active_tools and assistant_content:
+                valid = {t["function"]["name"] for t in active_tools}
+                cleaned, text_calls = _extract_text_tool_calls(assistant_content, valid)
+                if text_calls:
+                    assistant_content = cleaned
+                    pending_tool_calls = text_calls
+
             # ── No tools requested: plain response, end the turn ────────────
             if not pending_tool_calls:
                 if assistant_content:
@@ -456,7 +592,7 @@ class KaiApp:
                     result = self.tool_registry.call(tool_name, tool_args)
                     print_tool_result(tool_name, result)
 
-                if tool_name == "edit_file":
+                if tool_name in ("edit_file", "create_file"):
                     try:
                         rdata = json.loads(result)
                         if "diff" in rdata:
@@ -467,7 +603,7 @@ class KaiApp:
                                 print_error("Syntax check failed — feeding error back to model")
                                 console.print(Text(f"  {verify_err}", style="kaicode.error"))
                                 result = json.dumps({**rdata, "syntax_error": verify_err,
-                                    "note": "Edit saved but has a syntax error. Please fix it."})
+                                    "note": "File saved but has a syntax error. Fix it now with edit_file."})
                             else:
                                 print_success("Syntax OK")
                     except json.JSONDecodeError:

@@ -171,15 +171,25 @@ def build_system_prompt(project_info: ProjectInfo, extra: str = "") -> str:
 - run_tests — run the project's test suite (auto-detected)
 - update_memory — save notes that persist across sessions
 
+## How to call tools
+Use the native tool-calling mechanism. Do NOT print tool calls as JSON text
+in your reply — actually invoke the tool. Emit the tool call and stop; the
+result will be given back to you, then continue.
+
 ## Rules
-1. When the user asks you to DO something — use the appropriate tool. Do NOT say you cannot do it.
-2. For tasks involving 2+ steps or file edits: briefly outline your plan first (a short numbered list), THEN call the first tool. This gives the user a chance to confirm.
-3. For simple single-step tasks (create one file, run one command): just do it immediately with no preamble.
-4. Always read a file before editing it.
-5. You CAN create files and directories anywhere on the filesystem.
-6. Keep explanations concise. Let tool output speak for itself.
-7. For greetings and pure concept questions — respond directly without tools.
-8. Use update_memory to save anything worth remembering across sessions.""")
+1. COMPLETE THE WHOLE TASK. Keep using tools until it is fully done. Never stop
+   to ask "would you like me to…" or "shall I continue?" — just do it.
+2. When creating a file, put the COMPLETE final content in the create_file call
+   in ONE step. Never create an empty file and then edit it.
+3. When the user asks you to DO something, use the tool. Never say you cannot.
+4. Outline a short numbered plan ONLY for genuinely multi-file or multi-step
+   work. For a single file or single command, just do it — no preamble.
+5. Always read a file before editing it. Match old_content exactly.
+6. After writing code, run it or run_tests to verify it works, then fix failures.
+7. You CAN create files and directories anywhere on the filesystem.
+8. Keep prose minimal. Let tool output speak. End with a one-line summary only.
+9. For greetings and pure concept questions — respond directly without tools.
+10. Use update_memory to save anything worth remembering across sessions.""")
 
     if extra:
         sections.append(extra)
