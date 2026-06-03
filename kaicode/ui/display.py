@@ -123,6 +123,19 @@ def print_user_message(content: str) -> None:
     console.print()
 
 
+def print_plan(content: str) -> None:
+    """Show the model's plan before tool execution — amber/yellow bubble."""
+    renderable = Markdown(content, code_theme="monokai") if ("```" in content or "`" in content) else Text(content, style="#fff8e1")
+    console.print()
+    console.print(Panel(
+        renderable,
+        title="[bold #fff8e1 on #e65100]  Plan  [/]",
+        title_align="left",
+        border_style="#e65100",
+        padding=(0, 2),
+    ))
+
+
 def print_kai_message(content: str) -> None:
     renderable = Markdown(content, code_theme="monokai") if ("```" in content or "`" in content) else Text(content, style="#e3f2fd")
     console.print()

@@ -29,6 +29,7 @@ from kaicode.ui.display import (
     print_info,
     print_success,
     print_kai_message,
+    print_plan,
     print_status,
     print_help,
 )
@@ -227,8 +228,26 @@ class KaiApp:
                 self._tokens_used += tokens
                 self.session.add_tokens(tokens)
 
-            # Render the full response at once now that we have it all
-            if assistant_content:
+            # If the model wrote a plan before calling a tool, show it and ask to proceed
+            if assistant_content and pending_tool_call and iteration == 0:
+                print_plan(assistant_content)
+                self.session.messages.append(
+                    Message(role="assistant", content=assistant_content)
+                )
+                console.print()
+                console.print(Text("  Proceed with this plan? [Y/n]: ", style="bold kaicode.warning"), end="")
+                try:
+                    answer = await asyncio.get_event_loop().run_in_executor(None, input)
+                except (KeyboardInterrupt, EOFError):
+                    console.print()
+                    return
+                if answer.strip().lower() in ("n", "no"):
+                    print_info("Plan cancelled.")
+                    return
+                # Confirmed — continue to tool execution below
+
+            elif assistant_content:
+                # Normal response with no pending tool call on first pass
                 print_kai_message(assistant_content)
                 self.session.messages.append(
                     Message(role="assistant", content=assistant_content)

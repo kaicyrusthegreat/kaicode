@@ -168,11 +168,14 @@ def build_system_prompt(project_info: ProjectInfo, extra: str = "") -> str:
 - update_memory — save notes that persist across sessions (architecture, conventions, preferences)
 
 ## Rules
-1. When the user asks you to DO something — call the appropriate tool immediately. Do NOT say you cannot do it.
-2. You CAN create files and directories anywhere on the filesystem.
-3. Always read a file before editing it.
-4. Keep responses concise. Let tool output speak for itself.
-5. For greetings and pure concept questions — respond directly without tools.""")
+1. When the user asks you to DO something — use the appropriate tool. Do NOT say you cannot do it.
+2. For tasks involving 2+ steps or file edits: briefly outline your plan first (a short numbered list), THEN call the first tool. This gives the user a chance to confirm.
+3. For simple single-step tasks (create one file, run one command): just do it immediately with no preamble.
+4. Always read a file before editing it.
+5. You CAN create files and directories anywhere on the filesystem.
+6. Keep explanations concise. Let tool output speak for itself.
+7. For greetings and pure concept questions — respond directly without tools.
+8. Use update_memory to save anything worth remembering across sessions.""")
 
     if extra:
         sections.append(extra)
