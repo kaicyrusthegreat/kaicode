@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kaicode"
+version = "0.1.0"
+description = "A terminal AI coding assistant supporting multiple AI providers"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Kai Cyrus", email = "me@kaicyrus.com"}
+]
+keywords = ["ai", "coding", "assistant", "terminal", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Terminals",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "rich>=13.7.0",
+    "httpx>=0.27.0",
+    "pyyaml>=6.0",
+    "click>=8.1.7",
+    "openai>=0.34.0",
+    "openai>=1.40.0",
+    "groq>=0.9.0",
+    "gitpython>=3.1.43",
+    "prompt_toolkit>=3.0.47",
+    "pygments>=2.18.0",
+    "pathspec>=0.12.1",
+]
+
+[project.scripts]
+kaicode = "kaicode.main:main"
+
+[project.urls]
+Homepage = "https://github.com/kaicyrus/kaicode"
+Repository = "https://github.com/kaicyrus/kaicode"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["kaicode*"]

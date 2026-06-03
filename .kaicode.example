@@ -1,0 +1,7 @@
+# KaiCode project config — copy to .kaicode in your project root
+# Settings here override ~/.kaicode/config.yaml for this project only.
+
+# default_provider: openai
+# system_prompt: "This is a Flutter app using Riverpod for state management."
+# max_context_files: 15
+# auto_detect_project: true
