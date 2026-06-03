@@ -31,7 +31,18 @@ class OllamaProvider(BaseProvider):
         for m in messages:
             msg: dict = {"role": m.role, "content": m.content}
             if m.tool_calls:
-                msg["tool_calls"] = m.tool_calls
+                # Ollama wants arguments as an OBJECT, not a JSON string
+                ollama_tcs = []
+                for tc in m.tool_calls:
+                    fn = tc.get("function", {})
+                    args = fn.get("arguments", {})
+                    if isinstance(args, str):
+                        try:
+                            args = json.loads(args)
+                        except json.JSONDecodeError:
+                            args = {}
+                    ollama_tcs.append({"function": {"name": fn.get("name", ""), "arguments": args}})
+                msg["tool_calls"] = ollama_tcs
             msgs.append(msg)
 
         payload: dict[str, Any] = {

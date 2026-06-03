@@ -109,6 +109,19 @@ def _is_real_plan(text: str) -> bool:
     items = re.findall(r'(?:^|\n)\s*[1-9]\d*[.)]\s+\w', text)
     return len(items) >= 2
 
+# Substrings that indicate a retryable, transient provider failure
+_TRANSIENT_MARKERS = (
+    "429", "500", "502", "503", "504",
+    "timeout", "timed out", "connect", "overloaded",
+    "temporarily", "rate limit", "read error", "remote protocol",
+)
+
+def _is_transient(err: str) -> bool:
+    low = err.lower()
+    return any(m in low for m in _TRANSIENT_MARKERS)
+
+MAX_RETRIES = 2
+
 
 # ── Permission helpers ────────────────────────────────────────────────────────
 
@@ -287,17 +300,14 @@ class KaiApp:
 
         for iteration in range(MAX_TOOL_ITERATIONS):
             assistant_content = ""
-            pending_tool_call: dict | None = None
+            pending_tool_calls: list[dict] = []
             usage: dict | None = None
-            live_stopped = False
-
             label = "Working" if iteration > 0 else ""
             live = Live(_StreamStatus(label), console=console, transient=True, refresh_per_second=10)
             live.start()
 
             if self._tools_disabled and iteration == 0 and _needs_tools(user_input):
                 live.stop()
-                live_stopped = True
                 console.print(Panel(
                     Text.assemble(
                         ("  ⚠  ", "kaicode.warning"),
@@ -320,124 +330,147 @@ class KaiApp:
             # Trim history to fit context window
             trimmed_messages = self._trim_messages(self.session.messages)
 
-            try:
-                stream = self.provider.stream_chat(
-                    messages=trimmed_messages,
-                    model=self.model,
-                    system=system_prompt,   # reused, not rebuilt
-                    tools=active_tools,
-                )
-                async for chunk in stream:
-                    if chunk.content:
-                        assistant_content += chunk.content
-                    if chunk.tool_call:
-                        pending_tool_call = chunk.tool_call
-                    if chunk.usage:
-                        usage = chunk.usage
-                    if chunk.done:
-                        break
-            except Exception as e:
-                if not live_stopped:
+            # ── Stream with retry on transient errors ───────────────────────
+            stream_ok = False
+            for attempt in range(MAX_RETRIES + 1):
+                assistant_content = ""
+                pending_tool_calls = []
+                usage = None
+                try:
+                    stream = self.provider.stream_chat(
+                        messages=trimmed_messages,
+                        model=self.model,
+                        system=system_prompt,   # reused, not rebuilt
+                        tools=active_tools,
+                    )
+                    async for chunk in stream:
+                        if chunk.content:
+                            assistant_content += chunk.content
+                        if chunk.tool_call:
+                            pending_tool_calls.append(chunk.tool_call)   # collect ALL, not just last
+                        if chunk.usage:
+                            usage = chunk.usage
+                        if chunk.done:
+                            break
+                    stream_ok = True
+                    break
+                except Exception as e:
                     live.stop()
-                    live_stopped = True
-                err = str(e)
-                if "does not support tools" in err.lower():
-                    self._tools_disabled = True
-                    print_info(f"'{self.model}' doesn't support tools — text-only mode.")
-                    self.session.messages.pop()
-                    await self.chat(user_input)
-                    return
-                if "ollama error 404" in err.lower() and self.provider_name == "ollama":
-                    available = await self.provider.list_models()
-                    if available:
-                        self.model = available[0]
-                        self.session.model = self.model
-                        print_error(f"Model not found. Switching to: {self.model}")
-                        self.print_header()
+                    err = str(e)
+                    if "does not support tools" in err.lower():
+                        self._tools_disabled = True
+                        print_info(f"'{self.model}' doesn't support tools — text-only mode.")
                         self.session.messages.pop()
                         await self.chat(user_input)
-                    else:
-                        print_error("No Ollama models installed. Run: ollama pull llama3.2")
+                        return
+                    if "ollama error 404" in err.lower() and self.provider_name == "ollama":
+                        available = await self.provider.list_models()
+                        if available:
+                            self.model = available[0]
+                            self.session.model = self.model
+                            print_error(f"Model not found. Switching to: {self.model}")
+                            self.print_header()
+                            self.session.messages.pop()
+                            await self.chat(user_input)
+                        else:
+                            print_error("No Ollama models installed. Run: ollama pull llama3.2")
+                        return
+                    # Retry only transient failures that happened before any output
+                    if (_is_transient(err) and not assistant_content
+                            and not pending_tool_calls and attempt < MAX_RETRIES):
+                        wait = 1.5 * (attempt + 1)
+                        print_info(f"Transient error — retrying in {wait:.0f}s ({attempt + 1}/{MAX_RETRIES})…")
+                        await asyncio.sleep(wait)
+                        live = Live(_StreamStatus("Retrying"), console=console, transient=True, refresh_per_second=10)
+                        live.start()
+                        continue
+                    print_error(f"Provider error: {e}")
                     return
-                print_error(f"Provider error: {e}")
+
+            live.stop()
+            if not stream_ok:
                 return
-            finally:
-                if not live_stopped:
-                    live.stop()
 
             if usage:
                 tokens = usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0)
                 self._tokens_used += tokens
                 self.session.add_tokens(tokens)
 
-            # ── Plan detection: only interrupt for real numbered plans ──────
-            if assistant_content and pending_tool_call and iteration == 0:
-                if _is_real_plan(assistant_content):
-                    # Real multi-step plan — show and ask to confirm
-                    print_plan(assistant_content)
-                    self.session.messages.append(Message(role="assistant", content=assistant_content))
-                    console.print()
-                    console.print(Text("  Proceed with this plan? [Y/n]: ", style="bold kaicode.warning"), end="")
-                    try:
-                        answer = await asyncio.get_event_loop().run_in_executor(None, input)
-                    except (KeyboardInterrupt, EOFError):
-                        console.print()
-                        return
-                    if answer.strip().lower() in ("n", "no"):
-                        print_info("Plan cancelled.")
-                        return
-                else:
-                    # Single-sentence preamble — show it but don't block execution
+            # ── No tools requested: plain response, end the turn ────────────
+            if not pending_tool_calls:
+                if assistant_content:
                     print_kai_message(assistant_content)
                     self.session.messages.append(Message(role="assistant", content=assistant_content))
-
-            elif assistant_content:
-                print_kai_message(assistant_content)
-                self.session.messages.append(Message(role="assistant", content=assistant_content))
-
-            if not pending_tool_call:
                 break
 
-            # ── Execute tool ───────────────────────────────────────────────
-            console.print()
-            tool_name = pending_tool_call.get("name", "")
-            tool_args = pending_tool_call.get("input", {})
-            tool_id   = pending_tool_call.get("id", "")
-
-            approved = await self._request_permission(tool_name, tool_args, reason=assistant_content.strip())
-            if not approved:
-                result = json.dumps({"error": "User denied this action."})
-            else:
-                print_tool_call(tool_name, tool_args)
-                result = self.tool_registry.call(tool_name, tool_args)
-                print_tool_result(tool_name, result)
-
-            if tool_name == "edit_file":
+            # ── Plan detection: only interrupt for real numbered plans ──────
+            if assistant_content and iteration == 0 and _is_real_plan(assistant_content):
+                print_plan(assistant_content)
+                console.print()
+                console.print(Text("  Proceed with this plan? [Y/n]: ", style="bold kaicode.warning"), end="")
                 try:
-                    rdata = json.loads(result)
-                    if "diff" in rdata:
-                        self.last_diff = rdata["diff"]
-                    if rdata.get("success"):
-                        verify_err = self._verify_file(tool_args.get("path", ""))
-                        if verify_err:
-                            print_error("Syntax check failed — feeding error back to model")
-                            console.print(Text(f"  {verify_err}", style="kaicode.error"))
-                            result = json.dumps({**rdata, "syntax_error": verify_err,
-                                "note": "Edit saved but has a syntax error. Please fix it."})
-                        else:
-                            print_success("Syntax OK")
-                except json.JSONDecodeError:
-                    pass
+                    answer = await asyncio.get_event_loop().run_in_executor(None, input)
+                except (KeyboardInterrupt, EOFError):
+                    console.print()
+                    self.session.messages.append(Message(role="assistant", content=assistant_content))
+                    return
+                if answer.strip().lower() in ("n", "no"):
+                    print_info("Plan cancelled.")
+                    self.session.messages.append(Message(role="assistant", content=assistant_content))
+                    return
+            elif assistant_content:
+                # Short preamble before tool calls — show it, don't block
+                print_kai_message(assistant_content)
 
+            # ── Store ONE assistant message holding the text + all tool calls
+            tool_calls_payload = [
+                {"id": tc.get("id", ""), "type": "function",
+                 "function": {"name": tc.get("name", ""),
+                              "arguments": json.dumps(tc.get("input", {}))}}
+                for tc in pending_tool_calls
+            ]
             self.session.messages.append(Message(
-                role="assistant", content="",
-                tool_calls=[{"id": tool_id, "type": "function",
-                             "function": {"name": tool_name, "arguments": json.dumps(tool_args)}}],
+                role="assistant",
+                content=assistant_content,
+                tool_calls=tool_calls_payload,
             ))
-            self.session.messages.append(Message(
-                role="tool", content=result,
-                tool_results=[{"tool_use_id": tool_id, "content": result}],
-            ))
+
+            # ── Execute each tool call, append a result per call ────────────
+            console.print()
+            for tc in pending_tool_calls:
+                tool_name = tc.get("name", "")
+                tool_args = tc.get("input", {})
+                tool_id   = tc.get("id", "")
+
+                approved = await self._request_permission(tool_name, tool_args, reason=assistant_content.strip())
+                if not approved:
+                    result = json.dumps({"error": "User denied this action."})
+                else:
+                    print_tool_call(tool_name, tool_args)
+                    result = self.tool_registry.call(tool_name, tool_args)
+                    print_tool_result(tool_name, result)
+
+                if tool_name == "edit_file":
+                    try:
+                        rdata = json.loads(result)
+                        if "diff" in rdata:
+                            self.last_diff = rdata["diff"]
+                        if rdata.get("success"):
+                            verify_err = self._verify_file(tool_args.get("path", ""))
+                            if verify_err:
+                                print_error("Syntax check failed — feeding error back to model")
+                                console.print(Text(f"  {verify_err}", style="kaicode.error"))
+                                result = json.dumps({**rdata, "syntax_error": verify_err,
+                                    "note": "Edit saved but has a syntax error. Please fix it."})
+                            else:
+                                print_success("Syntax OK")
+                    except json.JSONDecodeError:
+                        pass
+
+                self.session.messages.append(Message(
+                    role="tool", content=result,
+                    tool_results=[{"tool_use_id": tool_id, "content": result}],
+                ))
 
     def _verify_file(self, path: str) -> str | None:
         import subprocess, sys
