@@ -135,16 +135,50 @@ def _sanitize_json_block(block: str) -> str:
     return "".join(out)
 
 
+_HEREDOC_RE = re.compile(
+    r'(create_file|write_file|edit_file)\s+(\S+?)\s*<<\s*[\'"]?(\w+)[\'"]?\s*\n(.*?)\n\3\b',
+    re.S,
+)
+
+def _extract_heredoc_calls(content: str, valid_names: set[str]) -> tuple[str, list[dict]]:
+    """Parse shell-heredoc style tool calls some models emit:
+        create_file path <<EOF
+        ...content...
+        EOF
+    """
+    calls: list[dict] = []
+    def _repl(m: "re.Match") -> str:
+        name = m.group(1)
+        if name == "write_file":
+            name = "create_file"
+        if name not in valid_names:
+            return m.group(0)
+        path, body = m.group(2).strip().strip('"\''), m.group(4)
+        calls.append({
+            "id": f"hd_{len(calls)}",
+            "name": name,
+            "input": {"path": path, "content": body},
+        })
+        return ""
+    cleaned = _HEREDOC_RE.sub(_repl, content)
+    return cleaned, calls
+
+
 def _extract_text_tool_calls(content: str, valid_names: set[str]) -> tuple[str, list[dict]]:
     """Fallback: parse tool calls that a model emitted as JSON text instead of
     using the native tool-calling channel (very common with local models).
 
     Returns (cleaned_content, tool_calls). Each tool call is {id, name, input}.
     """
-    if not content or "{" not in content:
-        return content, []
+    # First handle shell-heredoc style (reasoning models like deepseek-r1)
+    heredoc_calls: list[dict] = []
+    if "<<" in content:
+        content, heredoc_calls = _extract_heredoc_calls(content, valid_names)
 
-    calls: list[dict] = []
+    if not content or "{" not in content:
+        return content, heredoc_calls
+
+    calls: list[dict] = list(heredoc_calls)
     spans: list[tuple[int, int]] = []
 
     i = 0
