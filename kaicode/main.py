@@ -29,7 +29,6 @@ from kaicode.ui.display import (
     print_info,
     print_success,
     print_help,
-    print_status,
     print_user_message,
     _MODEL_LABELS,
 )
@@ -47,23 +46,33 @@ PT_STYLE = PTStyle.from_dict({
 
 
 def _make_toolbar(app):
-    """Two-line bottom toolbar: separator then info row with left/right content."""
+    """Three-row toolbar: status · separator · hints."""
     def _toolbar():
         width = shutil.get_terminal_size((80, 20)).columns
         sep   = "─" * width
-
-        left  = " ⏵⏵ accept edits on  (shift+tab to cycle)  ·  ← for agents"
         tok   = f"~{app.tokens_used:,} tok" if app.tokens_used else "0 tok"
-        right = f"{app.provider_name} / {app.model}  ·  {tok}  "
-        gap   = " " * max(1, width - len(left) - len(right))
+
+        # Row 1 — status (replaces the old print_status rule)
+        status = f"  ◈  {app.provider_name} / {app.model}  ·  {tok}  ·  by Kai Cyrus"
+
+        # Row 3 — hints with right-aligned nothing (kept simple)
+        hints_l = " ⏵⏵ accept edits on  (shift+tab to cycle)  ·  ← for agents"
 
         return FormattedText([
-            ("fg:#3a3a3a",  sep),
-            ("",            "\n"),
+            # Row 1: status info
+            ("fg:#555555",      "  ◈  "),
+            ("fg:#00838f",      f"{app.provider_name}"),
+            ("fg:#444444",      " / "),
+            ("fg:#e65100bold",  f"{app.model}"),
+            ("fg:#555555",      f"  ·  {tok}  ·  "),
+            ("fg:#555555",      "by Kai Cyrus"),
+            ("",                "\n"),
+            # Row 2: separator
+            ("fg:#3a3a3a",      sep),
+            ("",                "\n"),
+            # Row 3: hints
             ("fg:#2196f3 bold", " ⏵⏵ accept edits on"),
-            ("fg:#666666",  "  (shift+tab to cycle)  ·  ← for agents"),
-            ("fg:#444444",  gap),
-            ("fg:#666666",  right),
+            ("fg:#666666",      "  (shift+tab to cycle)  ·  ← for agents"),
         ])
     return _toolbar
 
@@ -110,7 +119,6 @@ async def run_interactive(app) -> None:
 
         print_user_message(user_input)
         await app.chat(user_input)
-        print_status(app.tokens_used, app.model, app.provider_name)
 
 
 async def handle_command(cmd: str, app) -> None:
