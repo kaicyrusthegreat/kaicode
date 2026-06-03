@@ -39,8 +39,8 @@ from kaicode.session import Session, SESSIONS_DIR
 HISTORY_FILE = Path.home() / ".kaicode" / "history"
 
 PT_STYLE = PTStyle.from_dict({
-    "prompt":         "fg:#43a047 bold",   # green prompt symbol
-    "":               "bg:#0d2010 fg:#e8f5e9",  # dark green bg, light text
+    "prompt":         "fg:#50fa7b bold bg:#1a4a1a",
+    "":               "bg:#1a4a1a fg:#e8f5e9",
     "bottom-toolbar": "noreverse",
 })
 
@@ -53,7 +53,10 @@ def _make_toolbar(app):
         tok   = f"~{app.tokens_used:,} tok" if app.tokens_used else "0 tok"
 
         return FormattedText([
-            # Row 1: status info
+            # Row 1: blank spacing between input and info
+            ("",                " "),
+            ("",                "\n"),
+            # Row 2: status info
             ("fg:#555555",      "  ◈  "),
             ("fg:#00838f",      f"{app.provider_name}"),
             ("fg:#444444",      " / "),
