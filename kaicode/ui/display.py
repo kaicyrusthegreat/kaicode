@@ -113,8 +113,26 @@ def print_splash() -> None:
 
 def print_user_message(content: str) -> None:
     console.print()
-    console.print(Text("  User", style="bold kaicode.user"))
-    console.print(Text(f"  {content}", style="default"))
+    console.print(Panel(
+        Text(content, style="#e8f5e9"),
+        title="[bold #e8f5e9 on #2e7d32]  User  [/]",
+        title_align="left",
+        border_style="#43a047",
+        padding=(0, 2),
+    ))
+    console.print()
+
+
+def print_kai_message(content: str) -> None:
+    renderable = Markdown(content, code_theme="monokai") if ("```" in content or "`" in content) else Text(content, style="#e3f2fd")
+    console.print()
+    console.print(Panel(
+        renderable,
+        title="[bold #e3f2fd on #1565c0]  KaiCode  [/]",
+        title_align="left",
+        border_style="#2196f3",
+        padding=(0, 2),
+    ))
     console.print()
 
 
@@ -123,10 +141,7 @@ def render_assistant_chunk(chunk: str) -> None:
 
 
 def render_assistant_message(content: str) -> None:
-    if "```" in content or "`" in content:
-        console.print(Markdown(content, code_theme="monokai"))
-    else:
-        console.print(Text(content))
+    print_kai_message(content)
 
 
 def print_tool_call(tool_name: str, arguments: dict) -> None:
