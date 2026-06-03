@@ -254,7 +254,7 @@ class KaiApp:
             # Render the full response at once now that we have it all
             if assistant_content:
                 console.print()
-                console.print(Text("  ◈", style="kaicode.assistant"))
+                console.print(Text("  KaiCode", style="bold kaicode.logo"))
                 render_assistant_message(assistant_content)
                 self.session.messages.append(
                     Message(role="assistant", content=assistant_content)

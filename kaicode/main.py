@@ -60,7 +60,7 @@ def _make_toolbar(app):
         return FormattedText([
             ("fg:#3a3a3a",  sep),
             ("",            "\n"),
-            ("fg:#6a1b9a bold", " ⏵⏵ accept edits on"),
+            ("fg:#2196f3 bold", " ⏵⏵ accept edits on"),
             ("fg:#666666",  "  (shift+tab to cycle)  ·  ← for agents"),
             ("fg:#444444",  gap),
             ("fg:#666666",  right),
@@ -106,6 +106,7 @@ async def run_interactive(app) -> None:
             await handle_command(user_input, app)
             continue
 
+        print_user_message(user_input)
         await app.chat(user_input)
         print_status(app.tokens_used, app.model, app.provider_name)
 

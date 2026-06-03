@@ -112,9 +112,10 @@ def print_splash() -> None:
 
 
 def print_user_message(content: str) -> None:
-    console.print(Text("You", style="kaicode.user"), end=" ")
-    console.print(Text("›", style="kaicode.prompt"), end=" ")
-    console.print(Text(content))
+    console.print()
+    console.print(Text("  User", style="bold kaicode.user"))
+    console.print(Text(f"  {content}", style="default"))
+    console.print()
 
 
 def render_assistant_chunk(chunk: str) -> None:
