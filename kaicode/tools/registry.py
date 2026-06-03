@@ -264,9 +264,45 @@ class ToolRegistry:
             "repo_map":      lambda **kw: repo_map(**{"path": self.cwd, **kw}),
         }
 
+    # Common argument aliases models use that differ from our parameter names
+    _ARG_ALIASES = {
+        "cmd": "command", "shell": "command", "bash": "command", "script": "command",
+        "file": "path", "filename": "path", "filepath": "path", "file_path": "path",
+        "dir": "path", "directory": "path", "folder": "path",
+        "query": "pattern", "q": "pattern", "regex": "pattern", "text": "pattern",
+        "url_": "url", "link": "url", "uri": "url",
+        "msg": "message", "commit_message": "message",
+        "contents": "content", "body": "content", "data": "content",
+        "old": "old_content", "new": "new_content",
+        "old_str": "old_content", "new_str": "new_content",
+        "old_string": "old_content", "new_string": "new_content",
+    }
+
+    # Tools that accept a positional-ish single string the model sometimes
+    # passes under a generic key
+    def _normalize_args(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(args, dict):
+            return {}
+        # Find this tool's real parameter names from its schema
+        valid = set()
+        for t in TOOL_DEFINITIONS:
+            if t["function"]["name"] == name:
+                valid = set(t["function"]["parameters"].get("properties", {}).keys())
+                break
+        out: dict[str, Any] = {}
+        for k, v in args.items():
+            if k in valid:
+                out[k] = v
+            elif k in self._ARG_ALIASES and self._ARG_ALIASES[k] in valid and self._ARG_ALIASES[k] not in args:
+                out[self._ARG_ALIASES[k]] = v
+            else:
+                out[k] = v  # keep unknown keys; the tool will surface a clear error
+        return out
+
     def call(self, name: str, arguments: dict[str, Any]) -> str:
         if name not in self._tools:
             return json.dumps({"error": f"Unknown tool: {name}"})
+        arguments = self._normalize_args(name, arguments)
         try:
             result = self._tools[name](**arguments)
             return json.dumps(result, ensure_ascii=False)

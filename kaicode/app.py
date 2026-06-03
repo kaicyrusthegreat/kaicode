@@ -61,7 +61,10 @@ def _select_tools(message: str) -> list[dict]:
                                 "explain the", "how does this", "where is")):
         names.add("repo_map")
         names.add("grep_ast")
-    if any(w in lower for w in ("http", "url", "web", "doc", "fetch", "documentation", "api reference")):
+    # Note: do NOT trigger on bare "web" — it matches "web app"/"website" and
+    # tempts weak models to fetch instead of build.
+    if any(w in lower for w in ("http://", "https://", "url", "fetch the", "fetch this",
+                                "documentation", "api reference", "look up online", "from the web")):
         names.add("web_fetch")
     return [t for t in TOOL_DEFINITIONS if t["function"]["name"] in names]
 
