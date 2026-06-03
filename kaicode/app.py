@@ -136,9 +136,78 @@ class KaiApp:
         base = build_system_prompt(self.project_info, self.config.system_prompt)
         return base
 
+    def _find_relevant_files(self, user_input: str) -> list[tuple[str, str]]:
+        """Auto-detect files relevant to the user's message and return (path, content) pairs."""
+        import re
+        MAX_FILES    = 3
+        MAX_CHARS    = 2500
+        found: dict[str, str] = {}
+
+        # Extract: `backtick` items, file.ext patterns, symbols after keywords
+        backtick  = re.findall(r'`([^`]+)`', user_input)
+        file_refs = re.findall(r'\b([\w./\-]+\.(?:py|js|ts|dart|go|rs|rb|java|kt|swift|tsx|jsx|vue|css|yaml|yml|json|toml|md))\b', user_input)
+        sym_refs  = re.findall(
+            r'(?:in|the|function|class|method|def|fix|update|edit|read|check|look at)\s+["\']?([\w_]{3,})["\']?',
+            user_input, re.I
+        )
+
+        def _read(rel_path: str) -> str | None:
+            p = Path(self.cwd) / rel_path
+            if p.is_file() and p.stat().st_size < 200_000:
+                return p.read_text("utf-8", errors="replace")[:MAX_CHARS]
+            return None
+
+        def _search_and_read(pattern: str, use_regex: bool = False) -> None:
+            if len(found) >= MAX_FILES:
+                return
+            try:
+                data = json.loads(self.tool_registry.call("search_files", {
+                    "pattern": pattern, "use_regex": use_regex, "max_results": 2
+                }))
+                for r in data.get("results", []):
+                    fp = r["file"]
+                    if fp not in found:
+                        content = _read(fp)
+                        if content:
+                            found[fp] = content
+                            break
+            except Exception:
+                pass
+
+        # 1. Try direct file path references
+        for candidate in (backtick + file_refs):
+            if len(found) >= MAX_FILES:
+                break
+            content = _read(candidate)
+            if content:
+                found[candidate] = content
+            else:
+                _search_and_read(re.escape(candidate))
+
+        # 2. Try symbol search for identifiers
+        for sym in sym_refs:
+            if len(found) >= MAX_FILES:
+                break
+            _search_and_read(rf"\b{re.escape(sym)}\b", use_regex=True)
+
+        return list(found.items())
+
     async def chat(self, user_input: str) -> None:
         """Process one user turn through the agentic loop."""
-        self.session.messages.append(Message(role="user", content=user_input))
+        # Auto-load files relevant to the message
+        relevant = self._find_relevant_files(user_input)
+        if relevant:
+            names = ", ".join(p for p, _ in relevant)
+            print_info(f"Auto-loaded: {names}")
+            context_block = "\n\n".join(
+                f"<file path=\"{p}\">\n{content}\n</file>"
+                for p, content in relevant
+            )
+            augmented = f"{user_input}\n\n<auto_context>\n{context_block}\n</auto_context>"
+        else:
+            augmented = user_input
+
+        self.session.messages.append(Message(role="user", content=augmented))
 
         for iteration in range(MAX_TOOL_ITERATIONS):
             assistant_content = ""
