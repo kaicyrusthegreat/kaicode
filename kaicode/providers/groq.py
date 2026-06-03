@@ -34,12 +34,12 @@ class GroqProvider(OpenAIProvider):
         if not self.config.api_key:
             return False
         import httpx
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                response = await client.get(
-                    f"{self.api_base}/models",
-                    headers={"Authorization": f"Bearer {self.config.api_key}"},
-                )
-                return response.status_code == 200
-            except httpx.ConnectError:
-                return False
+        try:
+            response = await self.http.get(
+                f"{self.api_base}/models",
+                headers={"Authorization": f"Bearer {self.config.api_key}"},
+                timeout=10.0,
+            )
+            return response.status_code == 200
+        except httpx.ConnectError:
+            return False

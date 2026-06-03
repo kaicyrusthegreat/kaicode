@@ -75,109 +75,108 @@ class OpenAIProvider(BaseProvider):
             "Content-Type": "application/json",
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            try:
-                async with client.stream(
-                    "POST",
-                    f"{self.api_base}/chat/completions",
-                    json=payload,
-                    headers=headers,
-                ) as response:
-                    if response.status_code != 200:
-                        body = await response.aread()
-                        raise ProviderError(f"OpenAI error {response.status_code}: {body.decode()}")
+        try:
+            async with self.http.stream(
+                "POST",
+                f"{self.api_base}/chat/completions",
+                json=payload,
+                headers=headers,
+            ) as response:
+                if response.status_code != 200:
+                    body = await response.aread()
+                    raise ProviderError(f"OpenAI error {response.status_code}: {body.decode()}")
 
-                    tool_calls_partial: dict[int, dict] = {}
-                    usage: dict | None = None
+                tool_calls_partial: dict[int, dict] = {}
+                usage: dict | None = None
 
-                    async for line in response.aiter_lines():
-                        if not line.startswith("data: "):
-                            continue
-                        raw = line[6:]
-                        if raw == "[DONE]":
-                            yield StreamChunk(done=True, usage=usage)
-                            break
-                        try:
-                            data = json.loads(raw)
-                        except json.JSONDecodeError:
-                            continue
+                async for line in response.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    raw = line[6:]
+                    if raw == "[DONE]":
+                        yield StreamChunk(done=True, usage=usage)
+                        break
+                    try:
+                        data = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
 
-                        if "usage" in data and data["usage"]:
-                            u = data["usage"]
-                            usage = {
-                                "prompt_tokens": u.get("prompt_tokens", 0),
-                                "completion_tokens": u.get("completion_tokens", 0),
-                            }
+                    if "usage" in data and data["usage"]:
+                        u = data["usage"]
+                        usage = {
+                            "prompt_tokens": u.get("prompt_tokens", 0),
+                            "completion_tokens": u.get("completion_tokens", 0),
+                        }
 
-                        choices = data.get("choices", [])
-                        if not choices:
-                            continue
+                    choices = data.get("choices", [])
+                    if not choices:
+                        continue
 
-                        delta = choices[0].get("delta", {})
-                        finish = choices[0].get("finish_reason")
+                    delta = choices[0].get("delta", {})
+                    finish = choices[0].get("finish_reason")
 
-                        if delta.get("content"):
-                            yield StreamChunk(content=delta["content"])
+                    if delta.get("content"):
+                        yield StreamChunk(content=delta["content"])
 
-                        if delta.get("tool_calls"):
-                            for tc in delta["tool_calls"]:
-                                idx = tc.get("index", 0)
-                                if idx not in tool_calls_partial:
-                                    tool_calls_partial[idx] = {
-                                        "id": "",
-                                        "name": "",
-                                        "input_str": "",
-                                    }
-                                if tc.get("id"):
-                                    tool_calls_partial[idx]["id"] = tc["id"]
-                                fn = tc.get("function", {})
-                                if fn.get("name"):
-                                    tool_calls_partial[idx]["name"] = fn["name"]
-                                if fn.get("arguments"):
-                                    tool_calls_partial[idx]["input_str"] += fn["arguments"]
+                    if delta.get("tool_calls"):
+                        for tc in delta["tool_calls"]:
+                            idx = tc.get("index", 0)
+                            if idx not in tool_calls_partial:
+                                tool_calls_partial[idx] = {
+                                    "id": "",
+                                    "name": "",
+                                    "input_str": "",
+                                }
+                            if tc.get("id"):
+                                tool_calls_partial[idx]["id"] = tc["id"]
+                            fn = tc.get("function", {})
+                            if fn.get("name"):
+                                tool_calls_partial[idx]["name"] = fn["name"]
+                            if fn.get("arguments"):
+                                tool_calls_partial[idx]["input_str"] += fn["arguments"]
 
-                        if finish == "tool_calls":
-                            for tc in tool_calls_partial.values():
-                                try:
-                                    inp = json.loads(tc["input_str"])
-                                except json.JSONDecodeError:
-                                    inp = {}
-                                yield StreamChunk(tool_call={
-                                    "id": tc["id"],
-                                    "name": tc["name"],
-                                    "input": inp,
-                                })
+                    if finish == "tool_calls":
+                        for tc in tool_calls_partial.values():
+                            try:
+                                inp = json.loads(tc["input_str"])
+                            except json.JSONDecodeError:
+                                inp = {}
+                            yield StreamChunk(tool_call={
+                                "id": tc["id"],
+                                "name": tc["name"],
+                                "input": inp,
+                            })
 
-            except httpx.ConnectError:
-                raise ProviderError("Cannot connect to OpenAI API.")
+        except httpx.ConnectError:
+            raise ProviderError("Cannot connect to OpenAI API.")
 
     async def list_models(self) -> list[str]:
         if not self.config.api_key:
             return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"]
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                response = await client.get(
-                    f"{self.api_base}/models",
-                    headers={"Authorization": f"Bearer {self.config.api_key}"},
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    models = [m["id"] for m in data.get("data", [])
-                              if "gpt" in m["id"] or "o1" in m["id"] or "o3" in m["id"]]
-                    return sorted(models)
-            except httpx.ConnectError:
-                pass
+        try:
+            response = await self.http.get(
+                f"{self.api_base}/models",
+                headers={"Authorization": f"Bearer {self.config.api_key}"},
+                timeout=10.0,
+            )
+            if response.status_code == 200:
+                data = response.json()
+                models = [m["id"] for m in data.get("data", [])
+                          if "gpt" in m["id"] or "o1" in m["id"] or "o3" in m["id"]]
+                return sorted(models)
+        except httpx.ConnectError:
+            pass
         return ["gpt-4o", "gpt-4o-mini"]
 
     async def check_connection(self) -> bool:
         if not self.config.api_key:
             return False
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                response = await client.get(
-                    f"{self.api_base}/models",
-                    headers={"Authorization": f"Bearer {self.config.api_key}"},
-                )
-                return response.status_code == 200
-            except httpx.ConnectError:
-                return False
+        try:
+            response = await self.http.get(
+                f"{self.api_base}/models",
+                headers={"Authorization": f"Bearer {self.config.api_key}"},
+                timeout=10.0,
+            )
+            return response.status_code == 200
+        except httpx.ConnectError:
+            return False

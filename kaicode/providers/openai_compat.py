@@ -22,30 +22,30 @@ class OpenAICompatProvider(OpenAIProvider):
         headers = {}
         if self.config.api_key:
             headers["Authorization"] = f"Bearer {self.config.api_key}"
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            try:
-                response = await client.get(
-                    f"{self.api_base}/models",
-                    headers=headers,
-                )
-                return response.status_code == 200
-            except httpx.ConnectError:
-                return False
+        try:
+            response = await self.http.get(
+                f"{self.api_base}/models",
+                headers=headers,
+                timeout=5.0,
+            )
+            return response.status_code == 200
+        except httpx.ConnectError:
+            return False
 
     async def list_models(self) -> list[str]:
         import httpx
         headers = {}
         if self.config.api_key:
             headers["Authorization"] = f"Bearer {self.config.api_key}"
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                response = await client.get(
-                    f"{self.api_base}/models",
-                    headers=headers,
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    return [m["id"] for m in data.get("data", [])]
-            except httpx.ConnectError:
-                pass
+        try:
+            response = await self.http.get(
+                f"{self.api_base}/models",
+                headers=headers,
+                timeout=10.0,
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return [m["id"] for m in data.get("data", [])]
+        except httpx.ConnectError:
+            pass
         return []

@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import AsyncIterator, Any
 
+import httpx
+
 
 class ProviderError(Exception):
     pass
@@ -32,10 +34,31 @@ class BaseProvider(ABC):
 
     def __init__(self, config) -> None:
         self.config = config
+        self._http: httpx.AsyncClient | None = None
 
     @property
     def name(self) -> str:
         return self.config.name
+
+    @property
+    def http(self) -> httpx.AsyncClient:
+        """Long-lived pooled HTTP client — reuses TCP/TLS connections across turns."""
+        if self._http is None or self._http.is_closed:
+            self._http = httpx.AsyncClient(
+                timeout=httpx.Timeout(120.0, connect=10.0),
+                limits=httpx.Limits(
+                    max_keepalive_connections=5,
+                    max_connections=10,
+                    keepalive_expiry=90.0,
+                ),
+            )
+        return self._http
+
+    async def aclose(self) -> None:
+        """Close the pooled client (called when switching providers / on exit)."""
+        if self._http is not None and not self._http.is_closed:
+            await self._http.aclose()
+        self._http = None
 
     @abstractmethod
     async def stream_chat(

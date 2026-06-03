@@ -525,6 +525,7 @@ class KaiApp:
         self.print_header()
 
     async def switch_provider(self, provider_name: str, model: str | None = None) -> None:
+        await self.provider.aclose()   # close the old pooled HTTP client
         self.provider_name = provider_name
         self.provider = get_provider(provider_name, self.config)
         self.model = model or self.config.get_provider(provider_name).default_model or self._default_model()
@@ -547,7 +548,7 @@ class KaiApp:
         try:
             self.session = Session.load(name)
             self.provider_name = self.session.provider
-            self.provider = get_provider(self.provider_name, self.config)
+            self.provider = get_provider(self.provider_name, self.config)  # old client GC'd
             self.model = self.session.model
             self._tokens_used = self.session.total_tokens
             print_success(f"Loaded session '{name}' ({len(self.session.messages)} messages)")
