@@ -132,6 +132,7 @@ def print_user_message(content: str) -> None:
         title="[bold #e8f5e9 on #2e7d32]  User  [/]",
         title_align="left",
         border_style="#43a047",
+        style="on #1a3a1a",
         padding=(0, 2),
     ))
     console.print()
@@ -146,6 +147,7 @@ def print_plan(content: str) -> None:
         title="[bold #fff8e1 on #e65100]  Plan  [/]",
         title_align="left",
         border_style="#e65100",
+        style="on #2a1500",
         padding=(0, 2),
     ))
 
@@ -158,6 +160,7 @@ def print_kai_message(content: str) -> None:
         title="[bold #e3f2fd on #1565c0]  KaiCode  [/]",
         title_align="left",
         border_style="#2196f3",
+        style="on #0d1f3c",
         padding=(0, 2),
     ))
     console.print()
