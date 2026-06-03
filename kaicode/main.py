@@ -53,7 +53,10 @@ def _make_toolbar(app):
         tok   = f"~{app.tokens_used:,} tok" if app.tokens_used else "0 tok"
 
         return FormattedText([
-            # Row 1: bottom line of input box
+            # Row 1: blank green bottom padding (mirrors top padding in prompt)
+            ("bg:#1a4a1a",      " " * width),
+            ("",                "\n"),
+            # Row 2: bottom line of input box
             ("fg:#3a3a3a",      sep),
             ("",                "\n"),
             # Row 2: status info
