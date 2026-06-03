@@ -44,8 +44,11 @@ class BaseProvider(ABC):
     def http(self) -> httpx.AsyncClient:
         """Long-lived pooled HTTP client — reuses TCP/TLS connections across turns."""
         if self._http is None or self._http.is_closed:
+            # Generous read timeout: large local models (14-20GB) can take
+            # well over a minute just to load into memory before the first
+            # token. connect stays short; read/pool are long.
             self._http = httpx.AsyncClient(
-                timeout=httpx.Timeout(120.0, connect=10.0),
+                timeout=httpx.Timeout(600.0, connect=10.0),
                 limits=httpx.Limits(
                     max_keepalive_connections=5,
                     max_connections=10,

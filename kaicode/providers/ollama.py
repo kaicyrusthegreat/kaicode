@@ -103,6 +103,11 @@ class OllamaProvider(BaseProvider):
                 f"Cannot connect to Ollama at {self.base_url}. "
                 "Is Ollama running? Start with: ollama serve"
             )
+        except httpx.TimeoutException:
+            raise ProviderError(
+                f"'{model}' timed out. Large models can be slow to load — "
+                "try again (it may be faster once cached), or pick a smaller model."
+            )
 
     async def list_models(self) -> list[str]:
         try:
