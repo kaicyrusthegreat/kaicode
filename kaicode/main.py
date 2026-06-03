@@ -41,7 +41,7 @@ HISTORY_FILE = Path.home() / ".kaicode" / "history"
 PT_STYLE = PTStyle.from_dict({
     "prompt":         "fg:#50fa7b bold bg:#1a4a1a",
     "":               "bg:#1a4a1a fg:#e8f5e9",
-    "bottom-toolbar": "noreverse",
+    "bottom-toolbar": "bg:default fg:default noreverse",
 })
 
 
