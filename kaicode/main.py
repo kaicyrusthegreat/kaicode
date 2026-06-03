@@ -247,29 +247,34 @@ async def handle_command(cmd: str, app) -> None:
 
 
 async def _pick_model(models: list[str], app) -> None:
-    """Show a numbered model list and let the user pick by number or name."""
+    """Show a numbered model list with descriptions and let the user pick."""
     lines = Text()
     for i, m in enumerate(models, 1):
-        active = m == app.model
+        active     = m == app.model
         num_style  = "bold kaicode.success" if active else "bold kaicode.assistant"
-        name_style = "bold default" if active else "default"
-        label = _MODEL_LABELS.get(m, "")
-        tick = " ✓" if active else ""
+        name_style = "bold kaicode.success" if active else "bold default"
+        desc       = _MODEL_LABELS.get(m, "")
+        tick       = "  ✓  active" if active else ""
 
-        lines.append(f"  {i:>2}. ", style=num_style)
-        lines.append(f"{m}{tick}", style=name_style)
-        if label:
-            lines.append(f"  {label}", style="kaicode.muted")
+        # Model number + name
+        lines.append(f"\n  {i:>2}.  ", style=num_style)
+        lines.append(f"{m}", style=name_style)
+        if tick:
+            lines.append(tick, style="bold kaicode.success")
         lines.append("\n")
+
+        # Description indented below
+        if desc:
+            lines.append(f"       {desc}\n", style="kaicode.muted")
 
     console.print()
     console.print(Panel(
         lines,
-        title=f"[bold kaicode.logo] Models — {app.provider_name} [/]",
+        title=f"[bold kaicode.logo] Select a model — {app.provider_name} [/]",
         border_style="kaicode.separator",
         padding=(0, 1),
     ))
-    console.print(Text("  Pick a number or model name (Enter to cancel): ", style="bold kaicode.assistant"), end="")
+    console.print(Text("  Enter number or model name (Enter to cancel): ", style="bold kaicode.assistant"), end="")
 
     try:
         answer = await asyncio.get_event_loop().run_in_executor(None, input)

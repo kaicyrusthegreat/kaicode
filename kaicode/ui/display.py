@@ -36,25 +36,31 @@ _TOOL_ICONS = {
 }
 
 _MODEL_LABELS = {
-    "model-opus-4-8":           "Most capable",
-    "model-sonnet-4-6":         "Balanced performance",
-    "model-haiku-4-5-20251001": "Fast & efficient",
-    "model-3-5-sonnet-20241022":"Strong reasoning",
-    "model-3-5-haiku-20241022": "Fast",
-    "gpt-4o":                    "OpenAI flagship",
-    "gpt-4-turbo":               "GPT-4 Turbo",
-    "gpt-4o-mini":               "Fast & affordable",
-    "llama3.2":                  "Local · fast",
-    "llama3.1":                  "Local · capable",
-    "llama3.1:8b":               "Local · fast",
-    "qwen2.5-coder":             "Local · code-focused",
-    "mistral-nemo":              "Local · multilingual",
-    "deepseek-r1:8b":            "Local · reasoning",
-    "gemma4:latest":             "Local · Google",
-    "gpt-oss:20b":               "Local · large",
-    "llama-3.1-70b-versatile":   "Groq · fast",
-    "llama-3.3-70b-versatile":   "Groq · versatile",
-    "mixtral-8x7b-32768":        "Groq · large context",
+    # OpenAI
+    "model-opus-4-8":            "Best for complex reasoning, architecture planning, and large codebases",
+    "model-sonnet-4-6":          "Best for everyday coding — smart, fast, well-balanced",
+    "model-haiku-4-5-20251001":  "Best for quick edits, simple tasks, and fast responses",
+    "model-3-5-sonnet-20241022": "Best for strong reasoning and reliable code generation",
+    "model-3-5-haiku-20241022":  "Best for rapid, lightweight coding tasks",
+    # OpenAI
+    "gpt-4o":                     "Best for complex coding, vision, and multi-step instructions",
+    "gpt-4-turbo":                "Best for long documents and context-heavy tasks",
+    "gpt-4o-mini":                "Best for fast, affordable day-to-day tasks",
+    # Ollama (local)
+    "llama3.2":                   "Best for quick chat and simple code — runs locally",
+    "llama3.2:latest":            "Best for quick chat and simple code — runs locally",
+    "llama3.1":                   "Best for code tasks and longer reasoning — runs locally",
+    "llama3.1:8b":                "Best for fast responses with low memory usage — runs locally",
+    "qwen2.5-coder":              "Best for coding specifically — trained on code — runs locally",
+    "qwen2.5-coder:latest":       "Best for coding specifically — trained on code — runs locally",
+    "deepseek-r1:8b":             "Best for step-by-step reasoning and math — runs locally",
+    "gemma4:latest":              "Best for general tasks, Google's model — runs locally",
+    "gpt-oss:20b":                "Best for complex coding tasks, large local model — runs locally",
+    "mistral-nemo":               "Best for multilingual tasks and general use — runs locally",
+    # Groq (fast cloud inference)
+    "llama-3.1-70b-versatile":   "Best for powerful reasoning at blazing cloud speed",
+    "llama-3.3-70b-versatile":   "Best for versatile tasks at very high speed (cloud)",
+    "mixtral-8x7b-32768":        "Best for long-context tasks up to 32K tokens (cloud)",
 }
 
 
