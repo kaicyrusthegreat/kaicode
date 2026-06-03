@@ -38,6 +38,55 @@ from kaicode.ui.display import (
 MAX_TOOL_ITERATIONS = 10
 
 
+import re as _re
+
+# Patterns that signal a purely conversational or conceptual message — no tools needed.
+_CHAT_RE = _re.compile(
+    r'^(?:'
+    r'hi|hello|hey|yo|sup|howdy|'
+    r'thanks|thank you|ty|thx|'
+    r'ok|okay|sure|yep|yeah|nope|nah|'
+    r'bye|goodbye|'
+    r'good|great|nice|cool|awesome|perfect|got it|sounds good|makes sense|'
+    r'what is\b|what are\b|what\'s\b|'
+    r'who is\b|who are\b|'
+    r'why is\b|why does\b|why do\b|'
+    r'how does\b|how do\b|how is\b|how are\b|'
+    r'explain\b|tell me\b|can you explain\b|'
+    r'what do you\b|what\'s the difference\b|'
+    r'lol|haha|hehe'
+    r')',
+    _re.I,
+)
+
+_HAS_TASK = _re.compile(
+    r'(?:^|[\s"])/[\w./]+'                       # /unix/path
+    r'|\b[\w./\-]+\.(?:py|js|ts|dart|go|rs|rb|java|kt|tsx|jsx|vue|'
+    r'yaml|yml|json|toml|md|sh|css|html|swift|cs|cpp|c|h)\b'  # filename.ext
+    r'|\b(?:'
+    r'file|folder|dir(?:ectory)?|create|make|edit|update|fix|refactor|'
+    r'read|write|delete|remove|rename|move|copy|'
+    r'run|execute|install|build|compile|test|commit|push|'
+    r'search|find|grep|implement|add|generate|scaffold'
+    r')\b',
+    _re.I,
+)
+
+def _needs_tools(message: str) -> bool:
+    """True when the message is likely a task that requires tool access."""
+    msg = message.strip()
+    # Always give tools if there's a clear task indicator
+    if _HAS_TASK.search(msg):
+        return True
+    # Suppress tools for short conversational/conceptual messages
+    if _CHAT_RE.match(msg) and len(msg) < 120:
+        return False
+    # Short message with no task signal → probably chatting
+    if len(msg) < 30:
+        return False
+    return True
+
+
 class _StreamStatus:
     """Live display shown while the AI is generating a response."""
 
@@ -224,7 +273,7 @@ class KaiApp:
             )
             live.start()
 
-            if self._tools_disabled and iteration == 0:
+            if self._tools_disabled and iteration == 0 and _needs_tools(user_input):
                 live.stop()
                 live_stopped = True
                 console.print()
@@ -243,7 +292,11 @@ class KaiApp:
                 ))
                 return
 
-            active_tools = None if self._tools_disabled else TOOL_DEFINITIONS
+            active_tools = (
+                None if self._tools_disabled
+                else TOOL_DEFINITIONS if _needs_tools(user_input)
+                else None
+            )
 
             try:
                 stream = self.provider.stream_chat(
