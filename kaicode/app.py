@@ -56,6 +56,11 @@ def _select_tools(message: str) -> list[dict]:
         names.add("update_memory")
     if any(w in lower for w in ("symbol", "function", "class", "def ", "struct", "interface", "ast")):
         names.add("grep_ast")
+    if any(w in lower for w in ("structure", "overview", "architecture", "codebase",
+                                "the project", "this project", "the repo", "understand",
+                                "explain the", "how does this", "where is")):
+        names.add("repo_map")
+        names.add("grep_ast")
     if any(w in lower for w in ("http", "url", "web", "doc", "fetch", "documentation", "api reference")):
         names.add("web_fetch")
     return [t for t in TOOL_DEFINITIONS if t["function"]["name"] in names]
@@ -131,6 +136,7 @@ _AUTO_APPROVE_TOOLS = {
     "grep_ast",      # read-only symbol search
     "web_fetch",     # read-only URL fetch
     "update_memory", # user's own persistent notes
+    "repo_map",      # read-only codebase index
 }
 
 _TOOL_ACTION_LABELS = {

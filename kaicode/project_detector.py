@@ -166,6 +166,7 @@ def build_system_prompt(project_info: ProjectInfo, extra: str = "") -> str:
 - run_command — run any shell command
 - git_status / git_commit — git operations
 - grep_ast — find function/class definitions by name (smarter than text search)
+- repo_map — compact map of the whole codebase (files + their classes/functions)
 - web_fetch — fetch a URL for docs or API references
 - run_tests — run the project's test suite (auto-detected)
 - update_memory — save notes that persist across sessions

@@ -265,6 +265,15 @@ def print_tool_result(tool_name: str, result: str) -> None:
         console.print(table)
         return
 
+    if tool_name == "repo_map" and "map" in data:
+        console.print(Panel(
+            Text(data["map"][:4000], style="kaicode.dir"),
+            title=f"[kaicode.dir]repo map · {data.get('files', 0)} files[/]",
+            border_style="kaicode.separator",
+            padding=(0, 1),
+        ))
+        return
+
     if tool_name == "web_fetch" and "content" in data:
         console.print(Panel(
             Text(data["content"][:3000]),

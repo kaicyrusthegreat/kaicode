@@ -12,6 +12,7 @@ from kaicode.tools.memory_tools import update_memory
 from kaicode.tools.ast_tools import grep_ast
 from kaicode.tools.web_tools import web_fetch
 from kaicode.tools.test_tools import run_tests
+from kaicode.tools.repo_map_tools import repo_map
 
 
 TOOL_DEFINITIONS = [
@@ -225,6 +226,18 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "repo_map",
+            "description": "Get a compact map of the whole codebase — every source file with its top-level classes and functions. Call this first when you need to understand an unfamiliar project's structure before diving into specific files.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
 ]
 
 
@@ -248,6 +261,7 @@ class ToolRegistry:
             "grep_ast":      lambda **kw: grep_ast(**{"path": self.cwd, **kw}),
             "web_fetch":     web_fetch,
             "run_tests":     lambda **kw: run_tests(**{"path": self.cwd, **kw}),
+            "repo_map":      lambda **kw: repo_map(**{"path": self.cwd, **kw}),
         }
 
     def call(self, name: str, arguments: dict[str, Any]) -> str:
