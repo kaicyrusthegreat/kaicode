@@ -20,6 +20,31 @@ class OpenAIProvider(BaseProvider):
     def api_base(self) -> str:
         return self.config.base_url or OPENAI_API_BASE
 
+    def _build_messages(self, messages: list[Message], system: str = "") -> list[dict]:
+        """Convert internal messages to OpenAI wire format with correct tool linkage."""
+        msgs: list[dict] = []
+        if system:
+            msgs.append({"role": "system", "content": system})
+        for m in messages:
+            if m.role == "tool":
+                # Tool result — must carry tool_call_id to link back to the call
+                tcid = m.tool_results[0]["tool_use_id"] if m.tool_results else ""
+                msgs.append({
+                    "role": "tool",
+                    "tool_call_id": tcid,
+                    "content": m.content,
+                })
+            elif m.role == "assistant" and m.tool_calls:
+                # Assistant turn that issued tool calls — content may be empty
+                msgs.append({
+                    "role": "assistant",
+                    "content": m.content or None,
+                    "tool_calls": m.tool_calls,
+                })
+            else:
+                msgs.append({"role": m.role, "content": m.content})
+        return msgs
+
     async def stream_chat(
         self,
         messages: list[Message],
@@ -34,11 +59,7 @@ class OpenAIProvider(BaseProvider):
                 "Set OPENAI_API_KEY env var or add to ~/.kaicode/config.yaml"
             )
 
-        msgs = []
-        if system:
-            msgs.append({"role": "system", "content": system})
-        for m in messages:
-            msgs.append({"role": m.role, "content": m.content})
+        msgs = self._build_messages(messages, system)
 
         payload: dict[str, Any] = {
             "model": model,
