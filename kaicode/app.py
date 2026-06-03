@@ -11,6 +11,8 @@ from typing import Any
 
 from rich.console import Console
 from rich.live import Live
+from rich.padding import Padding
+from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.text import Text
 
@@ -152,6 +154,23 @@ class KaiApp:
             )
             spinner.start()
 
+            if self._tools_disabled and iteration == 0 and _needs_tools(user_input):
+                console.print()
+                console.print(Panel(
+                    Text.assemble(
+                        ("  ⚠  ", "bold yellow"),
+                        (f"'{self.model}' doesn't support tools so KaiCode can't take actions.\n\n", "white"),
+                        ("  Switch to a tool-capable model with ", "dim white"),
+                        ("/model", "bold cyan"),
+                        (" and try again.\n", "dim white"),
+                        ("  Ollama models with tool support: ", "dim white"),
+                        ("llama3.1, llama3.2, qwen2.5-coder, mistral-nemo", "cyan"),
+                    ),
+                    border_style="yellow",
+                    padding=(0, 1),
+                ))
+                return
+
             active_tools = (
                 None if self._tools_disabled
                 else TOOL_DEFINITIONS if _needs_tools(user_input)
@@ -275,9 +294,6 @@ class KaiApp:
             return True
         if tool_name in self._always_allowed:
             return True
-
-        from rich.panel import Panel
-        from rich.padding import Padding
 
         label = _TOOL_ACTION_LABELS.get(tool_name, tool_name)
         detail = _format_permission_detail(tool_name, tool_args)
