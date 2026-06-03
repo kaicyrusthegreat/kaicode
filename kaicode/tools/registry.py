@@ -9,6 +9,9 @@ from kaicode.tools.file_tools import read_file, edit_file, create_file, create_d
 from kaicode.tools.search_tools import search_files
 from kaicode.tools.git_tools import git_status, git_commit, git_diff
 from kaicode.tools.memory_tools import update_memory
+from kaicode.tools.ast_tools import grep_ast
+from kaicode.tools.web_tools import web_fetch
+from kaicode.tools.test_tools import run_tests
 
 
 TOOL_DEFINITIONS = [
@@ -176,6 +179,52 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "grep_ast",
+            "description": "Search for function, class, or symbol definitions by name using AST analysis for Python and regex for other languages. More precise than search_files — finds actual definitions, not just mentions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol":      {"type": "string",  "description": "Symbol name to find (function, class, variable)"},
+                    "path":        {"type": "string",  "description": "Directory to search (default: project root)"},
+                    "symbol_type": {"type": "string",  "description": "'function', 'class', or 'any' (default: 'any')"},
+                },
+                "required": ["symbol"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_fetch",
+            "description": "Fetch a URL and return its text content. Use to look up documentation, package APIs, error messages, or any web resource.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url":       {"type": "string",  "description": "URL to fetch"},
+                    "max_chars": {"type": "integer", "description": "Max characters to return (default: 6000)"},
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_tests",
+            "description": "Run the project's test suite. Auto-detects the runner (pytest, npm test, flutter test, go test, cargo test, etc.) or accepts a custom command. Always run tests after making code changes.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string",  "description": "Custom test command (optional — auto-detected if omitted)"},
+                    "timeout": {"type": "integer", "description": "Timeout in seconds (default: 60)"},
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 
@@ -196,6 +245,9 @@ class ToolRegistry:
             "git_commit": lambda **kw: git_commit(**{"path": self.cwd, **kw}),
             "git_diff":      lambda **kw: git_diff(**{"path": self.cwd, **kw}),
             "update_memory": lambda **kw: update_memory(**{"project_root": self.cwd, **kw}),
+            "grep_ast":      lambda **kw: grep_ast(**{"path": self.cwd, **kw}),
+            "web_fetch":     web_fetch,
+            "run_tests":     lambda **kw: run_tests(**{"path": self.cwd, **kw}),
         }
 
     def call(self, name: str, arguments: dict[str, Any]) -> str:

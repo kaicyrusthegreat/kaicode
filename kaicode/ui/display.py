@@ -222,6 +222,41 @@ def print_tool_result(tool_name: str, result: str) -> None:
         _print_git_status(data)
         return
 
+    if tool_name == "run_tests" and "output" in data:
+        passed = data.get("passed", False)
+        rc     = data.get("returncode", -1)
+        console.print(Panel(
+            Text(data["output"][:4000]),
+            title=f"[kaicode.dir]{data.get('command','tests')}[/]  [{'kaicode.success' if passed else 'kaicode.error'}]{'PASSED' if passed else 'FAILED'}[/]",
+            border_style="kaicode.success" if passed else "kaicode.error",
+            padding=(0, 1),
+        ))
+        return
+
+    if tool_name == "grep_ast" and "results" in data:
+        results = data.get("results", [])
+        if not results:
+            console.print(Text(f"  No definitions found for '{data.get('symbol','')}'", style="kaicode.muted"))
+            return
+        table = Table(box=box.SIMPLE, show_header=True, header_style="kaicode.assistant")
+        table.add_column("File",    style="kaicode.info", no_wrap=True)
+        table.add_column("Line",    style="kaicode.muted", justify="right", width=6)
+        table.add_column("Type",    style="kaicode.branch", width=10)
+        table.add_column("Signature", style="default")
+        for r in results[:20]:
+            table.add_row(r["file"], str(r["line"]), r.get("type",""), r.get("signature") or r.get("content",""))
+        console.print(table)
+        return
+
+    if tool_name == "web_fetch" and "content" in data:
+        console.print(Panel(
+            Text(data["content"][:3000]),
+            title=f"[kaicode.dir]{data.get('url','')[:80]}[/]",
+            border_style="kaicode.separator",
+            padding=(0, 1),
+        ))
+        return
+
     if tool_name == "run_command":
         stdout = data.get("stdout", "").strip()
         stderr = data.get("stderr", "").strip()
