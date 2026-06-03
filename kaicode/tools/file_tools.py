@@ -12,6 +12,8 @@ from typing import Any
 def read_file(path: str, start_line: int = 0, end_line: int = 0) -> dict[str, Any]:
     """Read a file's contents, optionally a line range."""
     try:
+        start_line = int(start_line)
+        end_line   = int(end_line)
         p = Path(path).expanduser().resolve()
         if not p.exists():
             return {"error": f"File not found: {path}"}
@@ -120,6 +122,8 @@ def list_files(
 ) -> dict[str, Any]:
     """List files in a directory tree."""
     try:
+        depth          = int(depth)
+        include_hidden = str(include_hidden).lower() not in ("false", "0", "")
         root = Path(path).expanduser().resolve()
         if not root.exists():
             return {"error": f"Path not found: {path}"}
@@ -178,6 +182,7 @@ def run_command(
     timeout: int = 30,
 ) -> dict[str, Any]:
     """Execute a shell command and return the output."""
+    timeout = int(timeout)
     BLOCKED = ["rm -rf /", "mkfs", "dd if=", ":(){:|:&};:"]
     for blocked in BLOCKED:
         if blocked in command:

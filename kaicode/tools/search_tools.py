@@ -18,6 +18,9 @@ def search_files(
 ) -> dict[str, Any]:
     """Search for a pattern in files."""
     try:
+        max_results    = int(max_results)
+        case_sensitive = str(case_sensitive).lower() not in ("false", "0", "")
+        use_regex      = str(use_regex).lower() not in ("false", "0", "")
         root = Path(path).expanduser().resolve()
         if not root.exists():
             return {"error": f"Path not found: {path}"}
