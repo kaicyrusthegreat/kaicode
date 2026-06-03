@@ -531,12 +531,20 @@ class KaiApp:
                 self.session.add_tokens(tokens)
 
             # ── Fallback: model emitted tool calls as JSON text, not natively ─
-            if not pending_tool_calls and active_tools and assistant_content:
+            # Always scan: a model may mix one native call with extra text calls.
+            if active_tools and assistant_content:
                 valid = {t["function"]["name"] for t in active_tools}
                 cleaned, text_calls = _extract_text_tool_calls(assistant_content, valid)
                 if text_calls:
                     assistant_content = cleaned
-                    pending_tool_calls = text_calls
+                    # Merge, skipping any that duplicate a native call
+                    seen = {(c.get("name"), json.dumps(c.get("input"), sort_keys=True))
+                            for c in pending_tool_calls}
+                    for c in text_calls:
+                        key = (c.get("name"), json.dumps(c.get("input"), sort_keys=True))
+                        if key not in seen:
+                            pending_tool_calls.append(c)
+                            seen.add(key)
 
             # ── No tools requested: plain response, end the turn ────────────
             if not pending_tool_calls:
