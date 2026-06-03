@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import NamedTuple
 
@@ -14,55 +15,51 @@ class ProjectInfo(NamedTuple):
 
 
 PROJECT_SIGNATURES: list[tuple[str, list[str], str, list[str]]] = [
-    # (type, marker_files, description, auto_context_files)
-    ("flutter", ["pubspec.yaml", "lib/main.dart"], "Flutter/Dart app",
+    ("flutter",      ["pubspec.yaml", "lib/main.dart"],              "Flutter/Dart app",
      ["pubspec.yaml", "lib/main.dart"]),
-    ("python_package", ["pyproject.toml", "setup.py"], "Python package",
+    ("python_package",["pyproject.toml", "setup.py"],               "Python package",
      ["pyproject.toml", "README.md"]),
-    ("python", ["requirements.txt", "*.py"], "Python project",
+    ("python",       ["requirements.txt", "*.py"],                   "Python project",
      ["requirements.txt"]),
-    ("node", ["package.json"], "Node.js project",
+    ("node",         ["package.json"],                               "Node.js project",
      ["package.json"]),
-    ("react", ["package.json", "src/App.tsx", "src/App.jsx"], "React app",
+    ("react",        ["package.json", "src/App.tsx", "src/App.jsx"], "React app",
      ["package.json", "src/App.tsx", "src/App.jsx"]),
-    ("nextjs", ["package.json", "next.config.js", "next.config.ts"], "Next.js app",
+    ("nextjs",       ["package.json", "next.config.js", "next.config.ts"], "Next.js app",
      ["package.json", "next.config.js"]),
-    ("rust", ["Cargo.toml"], "Rust project",
+    ("rust",         ["Cargo.toml"],                                 "Rust project",
      ["Cargo.toml", "src/main.rs", "src/lib.rs"]),
-    ("go", ["go.mod"], "Go module",
+    ("go",           ["go.mod"],                                     "Go module",
      ["go.mod"]),
-    ("java_gradle", ["build.gradle", "build.gradle.kts"], "Java/Kotlin Gradle project",
+    ("java_gradle",  ["build.gradle", "build.gradle.kts"],           "Java/Kotlin Gradle project",
      ["build.gradle", "build.gradle.kts"]),
-    ("java_maven", ["pom.xml"], "Java Maven project",
+    ("java_maven",   ["pom.xml"],                                    "Java Maven project",
      ["pom.xml"]),
-    ("ruby", ["Gemfile"], "Ruby project",
+    ("ruby",         ["Gemfile"],                                    "Ruby project",
      ["Gemfile"]),
-    ("php", ["composer.json"], "PHP project",
+    ("php",          ["composer.json"],                              "PHP project",
      ["composer.json"]),
-    ("swift", ["Package.swift", "*.xcodeproj"], "Swift/Xcode project",
+    ("swift",        ["Package.swift", "*.xcodeproj"],               "Swift/Xcode project",
      ["Package.swift"]),
-    ("elixir", ["mix.exs"], "Elixir/Phoenix project",
+    ("elixir",       ["mix.exs"],                                    "Elixir/Phoenix project",
      ["mix.exs"]),
-    ("django", ["manage.py", "settings.py"], "Django project",
+    ("django",       ["manage.py", "settings.py"],                   "Django project",
      ["manage.py", "requirements.txt"]),
-    ("fastapi", ["main.py", "requirements.txt"], "FastAPI project",
+    ("fastapi",      ["main.py", "requirements.txt"],                "FastAPI project",
      ["main.py", "requirements.txt"]),
-    ("docker", ["Dockerfile", "docker-compose.yml"], "Docker project",
+    ("docker",       ["Dockerfile", "docker-compose.yml"],           "Docker project",
      ["Dockerfile", "docker-compose.yml"]),
-    ("terraform", ["*.tf", "main.tf"], "Terraform infrastructure",
+    ("terraform",    ["*.tf", "main.tf"],                            "Terraform infrastructure",
      ["main.tf", "variables.tf"]),
 ]
 
 
 def detect_project(path: str = ".") -> ProjectInfo:
-    """Detect the project type and return relevant context."""
     root = Path(path).expanduser().resolve()
-
     for ptype, markers, desc, ctx_patterns in PROJECT_SIGNATURES:
         if _matches_markers(root, markers):
             context_files = _resolve_context_files(root, ctx_patterns)
             return ProjectInfo(ptype, root, context_files, desc)
-
     return ProjectInfo("generic", root, [], "Unknown project")
 
 
@@ -89,14 +86,70 @@ def _resolve_context_files(root: Path, patterns: list[str]) -> list[str]:
     return resolved
 
 
+def _read_file_snippet(path: Path, max_chars: int = 1500) -> str:
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if len(text) > max_chars:
+            return text[:max_chars] + f"\n… (truncated, {len(text)} chars total)"
+        return text
+    except Exception:
+        return ""
+
+
+def _git_context(root: Path) -> str:
+    lines = []
+    try:
+        branch = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=root, capture_output=True, text=True, timeout=3,
+        )
+        if branch.returncode == 0:
+            lines.append(f"Branch: {branch.stdout.strip()}")
+
+        log = subprocess.run(
+            ["git", "log", "--oneline", "-8"],
+            cwd=root, capture_output=True, text=True, timeout=3,
+        )
+        if log.returncode == 0 and log.stdout.strip():
+            lines.append("Recent commits:\n" + log.stdout.strip())
+
+        diff = subprocess.run(
+            ["git", "diff", "--stat", "HEAD"],
+            cwd=root, capture_output=True, text=True, timeout=3,
+        )
+        if diff.returncode == 0 and diff.stdout.strip():
+            lines.append("Uncommitted changes:\n" + diff.stdout.strip()[:600])
+    except Exception:
+        pass
+    return "\n".join(lines)
+
+
 def build_system_prompt(project_info: ProjectInfo, extra: str = "") -> str:
-    """Build a system prompt incorporating project context."""
-    base = f"""You are KaiCode, an AI coding assistant that runs in the terminal and takes real actions using tools.
+    sections: list[str] = []
 
-Project type: {project_info.description}
-Working directory: {project_info.root}
+    sections.append(
+        f"You are KaiCode, an AI coding assistant that runs in the terminal and takes real actions using tools.\n\n"
+        f"Project: {project_info.description}\n"
+        f"Working directory: {project_info.root}"
+    )
 
-## Your tools
+    # Inject actual file contents for key project files
+    file_sections = []
+    for rel_path in project_info.context_files[:6]:
+        abs_path = project_info.root / rel_path
+        if abs_path.is_file():
+            content = _read_file_snippet(abs_path)
+            if content:
+                file_sections.append(f"### {rel_path}\n```\n{content}\n```")
+    if file_sections:
+        sections.append("## Project files\n" + "\n\n".join(file_sections))
+
+    # Inject git context
+    git_ctx = _git_context(project_info.root)
+    if git_ctx:
+        sections.append(f"## Git context\n{git_ctx}")
+
+    sections.append("""## Your tools
 - read_file — read any file
 - edit_file — edit a file by replacing text
 - create_file — create a new file with content
@@ -107,12 +160,13 @@ Working directory: {project_info.root}
 - git_status / git_commit — git operations
 
 ## Rules
-1. When the user asks you to DO something (create, edit, delete, run, search, move, etc.) — call the appropriate tool immediately. Do NOT say you cannot do it.
-2. You CAN create files and directories anywhere on the filesystem, not just in the working directory.
-3. For greetings and pure questions with no action needed — respond directly without tools.
-4. Always read a file before editing it.
-5. Keep responses short. Let the tool output speak for itself.
-"""
+1. When the user asks you to DO something — call the appropriate tool immediately. Do NOT say you cannot do it.
+2. You CAN create files and directories anywhere on the filesystem.
+3. Always read a file before editing it.
+4. Keep responses concise. Let tool output speak for itself.
+5. For greetings and pure concept questions — respond directly without tools.""")
+
     if extra:
-        base += f"\n{extra}"
-    return base.strip()
+        sections.append(extra)
+
+    return "\n\n".join(sections)

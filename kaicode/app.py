@@ -95,26 +95,6 @@ def _format_permission_detail(tool_name: str, args: dict) -> str:
     return str(args)[:80]
 
 
-# Keywords that suggest the user wants file/code operations
-_TOOL_TRIGGERS = {
-    "file", "edit", "create", "read", "open", "write", "delete", "remove",
-    "search", "find", "grep", "look", "run", "execute", "command", "test",
-    "install", "build", "compile", "commit", "git", "diff", "change",
-    "fix", "refactor", "add", "implement", "update", "show", "list",
-    "directory", "folder", "mkdir", "rename", "move", "copy",
-    "function", "class", "import", "module", "code",
-    "error", "bug", "debug", "check", "review",
-}
-
-
-def _needs_tools(message: str) -> bool:
-    """Heuristic: only offer tools if the message looks like a code/file task."""
-    lower = message.lower()
-    words = set(lower.split())
-    # Direct mentions of files (has extension or slash)
-    if any(("." in w and len(w) > 3) or "/" in w for w in words):
-        return True
-    return bool(words & _TOOL_TRIGGERS)
 
 
 class KaiApp:
@@ -174,7 +154,7 @@ class KaiApp:
             )
             live.start()
 
-            if self._tools_disabled and iteration == 0 and _needs_tools(user_input):
+            if self._tools_disabled and iteration == 0:
                 live.stop()
                 live_stopped = True
                 console.print()
@@ -193,11 +173,7 @@ class KaiApp:
                 ))
                 return
 
-            active_tools = (
-                None if self._tools_disabled
-                else TOOL_DEFINITIONS if _needs_tools(user_input)
-                else None
-            )
+            active_tools = None if self._tools_disabled else TOOL_DEFINITIONS
 
             try:
                 stream = self.provider.stream_chat(
