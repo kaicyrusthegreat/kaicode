@@ -53,8 +53,8 @@ def _make_toolbar(app):
         tok   = f"~{app.tokens_used:,} tok" if app.tokens_used else "0 tok"
 
         return FormattedText([
-            # Row 1: blank spacing between input and info
-            ("",                " "),
+            # Row 1: bottom line of input box
+            ("fg:#3a3a3a",      sep),
             ("",                "\n"),
             # Row 2: status info
             ("fg:#555555",      "  ◈  "),
@@ -63,10 +63,10 @@ def _make_toolbar(app):
             ("fg:#e65100 bold", f"{app.model}"),
             ("fg:#555555",      f"  ·  {tok}  ·  by Kai Cyrus"),
             ("",                "\n"),
-            # Row 2: separator
+            # Row 3: separator before hints
             ("fg:#3a3a3a",      sep),
             ("",                "\n"),
-            # Row 3: hints
+            # Row 4: hints
             ("fg:#2196f3 bold", " ⏵⏵ accept edits on"),
             ("fg:#666666",      "  (shift+tab to cycle)  ·  ← for agents"),
         ])
@@ -93,12 +93,17 @@ async def run_interactive(app) -> None:
 
     while True:
         try:
+            console.rule(style="dim #3a3a3a")   # top line of input area
+            prompt_fmt = FormattedText([
+                ("bg:#1a4a1a",               "\n"),   # blank top padding (green)
+                ("fg:#50fa7b bold bg:#1a4a1a", "  › "),
+            ])
             user_input = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: ps.prompt("  › ", style=PT_STYLE),
+                lambda: ps.prompt(prompt_fmt, style=PT_STYLE),
             )
-            # Erase the prompt echo — message shows only in its bubble
-            sys.stdout.write('\x1b[1A\x1b[2K\r')
+            # Erase blank padding line + prompt echo (2 lines)
+            sys.stdout.write('\x1b[2A\x1b[2K\r\x1b[1B\x1b[2K\r\x1b[1A')
             sys.stdout.flush()
         except (KeyboardInterrupt, EOFError):
             console.print()
