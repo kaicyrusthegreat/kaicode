@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -11,6 +12,7 @@ import click
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.styles import Style as PTStyle
 from rich.console import Console
 from rich.panel import Panel
@@ -29,6 +31,7 @@ from kaicode.ui.display import (
     print_help,
     print_status,
     print_user_message,
+    _MODEL_LABELS,
 )
 from kaicode.ui.theme import KAICODE_THEME
 from kaicode.session import Session, SESSIONS_DIR
@@ -37,9 +40,32 @@ from kaicode.session import Session, SESSIONS_DIR
 HISTORY_FILE = Path.home() / ".kaicode" / "history"
 
 PT_STYLE = PTStyle.from_dict({
-    "prompt": "#00d7d7 bold",
-    "": "#ffffff",
+    "prompt":         "ansiblue bold",   # terminal's own blue — adapts to dark/light
+    "":               "default",
+    "bottom-toolbar": "noreverse",       # no forced background — inherits terminal bg
 })
+
+
+def _make_toolbar(app):
+    """Return a prompt_toolkit bottom toolbar that looks like a full-width rule."""
+    def _toolbar():
+        tok  = f"~{app.tokens_used:,} tok" if app.tokens_used else "0 tok"
+        msgs = len(app.session.messages)
+        info = (
+            f" {tok}  ·  {app.provider_name} / {app.model}"
+            f"  ·  {msgs} msg{'s' if msgs != 1 else ''}"
+            f"  ·  ⏵⏵ accept edits  (shift+tab to cycle) "
+        )
+        width  = shutil.get_terminal_size((80, 20)).columns
+        pad    = max(0, width - len(info))
+        left   = "─" * (pad // 2)
+        right  = "─" * (pad - pad // 2)
+        return HTML(
+            f'<style fg="#888888">{left}</style>'
+            f'<style fg="#888888">{info}</style>'
+            f'<style fg="#888888">{right}</style>'
+        )
+    return _toolbar
 
 
 async def run_interactive(app) -> None:
@@ -50,20 +76,22 @@ async def run_interactive(app) -> None:
         auto_suggest=AutoSuggestFromHistory(),
         style=PT_STYLE,
         mouse_support=False,
+        bottom_toolbar=_make_toolbar(app),
     )
 
     print_splash()
     app.print_header()
-    print_info(f"Provider: {app.provider_name}  Model: {app.model}")
+    print_info(f"Provider: {app.provider_name}  ·  Model: {app.model}")
     print_info(f"Project: {app.project_info.description}")
     print_info("Type /help for commands, /quit to exit.")
     console.print()
 
     while True:
         try:
+            console.rule(style="kaicode.separator")
             user_input = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: ps.prompt("You › ", style=PT_STYLE),
+                lambda: ps.prompt("› ", style=PT_STYLE),
             )
         except (KeyboardInterrupt, EOFError):
             console.print()
@@ -74,7 +102,6 @@ async def run_interactive(app) -> None:
         if not user_input:
             continue
 
-        # Slash commands
         if user_input.startswith("/"):
             await handle_command(user_input, app)
             continue
@@ -149,32 +176,43 @@ async def handle_command(cmd: str, app) -> None:
         if not sessions:
             print_info("No saved sessions.")
         else:
-            t = Table(title="Saved Sessions", box=box.ROUNDED, border_style="cyan")
-            t.add_column("Name", style="cyan")
-            t.add_column("Provider", style="yellow")
-            t.add_column("Model", style="white")
+            t = Table(
+                title=" Saved Sessions ",
+                box=box.ROUNDED,
+                border_style="kaicode.separator",
+                title_style="bold kaicode.logo",
+                header_style="kaicode.muted",
+                padding=(0, 1),
+            )
+            t.add_column("Name", style="bold kaicode.assistant")
+            t.add_column("Provider", style="kaicode.info")
+            t.add_column("Model", style="kaicode.model")
             t.add_column("Messages", justify="right", style="dim")
             t.add_column("Updated", style="dim")
             for s in sessions:
                 ts = time.strftime("%Y-%m-%d %H:%M", time.localtime(s["updated_at"]))
                 t.add_row(s["name"], s["provider"], s["model"], str(s["messages"]), ts)
+            console.print()
             console.print(t)
+            console.print()
 
     elif command == "/status":
+        console.print()
         print_status(app.tokens_used, app.model, app.provider_name, "ready")
         print_info(f"Project: {app.project_info.description}")
         print_info(f"Messages in history: {len(app.session.messages)}")
+        console.print()
 
     elif command == "/context":
         if app.project_info.context_files:
             print_info("Auto-detected context files:")
             for f in app.project_info.context_files:
-                console.print(f"  [cyan]{f}[/]")
+                console.print(f"  [kaicode.info]{f}[/]")
         else:
             print_info("No context files auto-detected.")
 
     else:
-        print_error(f"Unknown command: {command}. Type /help for available commands.")
+        print_error(f"Unknown command: {command}  —  type /help for available commands.")
 
 
 async def _pick_model(models: list[str], app) -> None:
@@ -182,19 +220,25 @@ async def _pick_model(models: list[str], app) -> None:
     lines = Text()
     for i, m in enumerate(models, 1):
         active = m == app.model
-        num_style = "bold green" if active else "bold cyan"
-        name_style = "bold white" if active else "white"
+        num_style  = "bold kaicode.success" if active else "bold kaicode.assistant"
+        name_style = "bold default" if active else "default"
+        label = _MODEL_LABELS.get(m, "")
         tick = " ✓" if active else ""
-        lines.append(f"  {i}. ", style=num_style)
-        lines.append(f"{m}{tick}\n", style=name_style)
 
+        lines.append(f"  {i:>2}. ", style=num_style)
+        lines.append(f"{m}{tick}", style=name_style)
+        if label:
+            lines.append(f"  {label}", style="kaicode.muted")
+        lines.append("\n")
+
+    console.print()
     console.print(Panel(
         lines,
-        title=f"[bold cyan] Models — {app.provider_name} [/]",
-        border_style="cyan",
+        title=f"[bold kaicode.logo] Models — {app.provider_name} [/]",
+        border_style="kaicode.separator",
         padding=(0, 1),
     ))
-    console.print(Text("  Pick a number or model name (Enter to cancel): ", style="bold cyan"), end="")
+    console.print(Text("  Pick a number or model name (Enter to cancel): ", style="bold kaicode.assistant"), end="")
 
     try:
         answer = await asyncio.get_event_loop().run_in_executor(None, input)
@@ -221,15 +265,14 @@ async def _pick_model(models: list[str], app) -> None:
 @click.option("--model", "-m", default=None, help="Model name")
 @click.option("--session", "-s", default=None, help="Load a saved session")
 @click.option("--config", "-c", "config_path", default=None, help="Path to config file")
-@click.version_option(version="0.1.0", prog_name="kaicode")
+@click.version_option(version="1.0.0", prog_name="kaicode")
 @click.argument("prompt", nargs=-1)
 def main(provider, model, session, config_path, prompt):
-    """KaiCode - Terminal AI coding assistant.\n\nSupports Ollama, OpenAI, OpenAI, Groq, and any OpenAI-compatible API."""
+    """KaiCode — Terminal AI coding assistant.\n\nSupports Ollama, OpenAI, OpenAI, Groq, and any OpenAI-compatible API."""
     create_default_config()
 
     config = KaiConfig.load()
 
-    # Lazy import to avoid circular
     from kaicode.app import KaiApp
 
     try:
@@ -243,13 +286,11 @@ def main(provider, model, session, config_path, prompt):
 
     async def _run():
         if prompt:
-            # One-shot mode
             user_input = " ".join(prompt)
             app.print_header()
             print_user_message(user_input)
             await app.chat(user_input)
         else:
-            # Interactive mode
             await run_interactive(app)
 
     try:

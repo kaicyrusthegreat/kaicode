@@ -11,9 +11,7 @@ from typing import Any
 
 from rich.console import Console
 from rich.live import Live
-from rich.padding import Padding
 from rich.panel import Panel
-from rich.spinner import Spinner
 from rich.text import Text
 
 from kaicode.config import KaiConfig
@@ -30,7 +28,6 @@ from kaicode.ui.display import (
     print_error,
     print_info,
     print_success,
-    render_assistant_chunk,
     render_assistant_message,
     print_status,
     print_help,
@@ -38,6 +35,32 @@ from kaicode.ui.display import (
 
 
 MAX_TOOL_ITERATIONS = 10
+
+
+class _StreamStatus:
+    """Live display shown while the AI is generating a response."""
+
+    _PHASES = ["Thinking", "Reasoning", "Deciphering", "Processing"]
+
+    def __init__(self, label: str = "") -> None:
+        self._start = time.monotonic()
+        self._label = label
+
+    def _elapsed(self) -> int:
+        return int(time.monotonic() - self._start)
+
+    def __rich__(self) -> Text:
+        elapsed = self._elapsed()
+        if self._label:
+            phase = self._label
+        else:
+            phase = self._PHASES[min(elapsed // 6, len(self._PHASES) - 1)]
+
+        t = Text()
+        t.append("  ✽ ", style="kaicode.assistant")
+        t.append(f"{phase}… ", style="kaicode.info")
+        t.append(f"({elapsed}s)", style="kaicode.muted")
+        return t
 
 # Tools that are read-only and safe to run without asking
 _AUTO_APPROVE_TOOLS = {
@@ -136,37 +159,36 @@ class KaiApp:
         """Process one user turn through the agentic loop."""
         self.session.messages.append(Message(role="user", content=user_input))
 
-        console.print()
-        console.print(Text("KaiCode", style="kaicode.assistant"), end=" ")
-        console.print(Text("›", style="kaicode.prompt"), end=" ")
-
         for iteration in range(MAX_TOOL_ITERATIONS):
             assistant_content = ""
             pending_tool_call: dict | None = None
             usage: dict | None = None
-            spinner_stopped = False
+            live_stopped = False
 
-            spinner = Live(
-                Spinner("dots", style="cyan"),
+            label = "Working" if iteration > 0 else ""
+            live = Live(
+                _StreamStatus(label),
                 console=console,
                 transient=True,
                 refresh_per_second=10,
             )
-            spinner.start()
+            live.start()
 
             if self._tools_disabled and iteration == 0 and _needs_tools(user_input):
+                live.stop()
+                live_stopped = True
                 console.print()
                 console.print(Panel(
                     Text.assemble(
-                        ("  ⚠  ", "bold yellow"),
-                        (f"'{self.model}' doesn't support tools so KaiCode can't take actions.\n\n", "white"),
-                        ("  Switch to a tool-capable model with ", "dim white"),
-                        ("/model", "bold cyan"),
-                        (" and try again.\n", "dim white"),
-                        ("  Ollama models with tool support: ", "dim white"),
-                        ("llama3.1, llama3.2, qwen2.5-coder, mistral-nemo", "cyan"),
+                        ("  ⚠  ", "kaicode.warning"),
+                        (f"'{self.model}' doesn't support tools — KaiCode can't take actions.\n\n", "default"),
+                        ("  Switch to a tool-capable model with ", "kaicode.muted"),
+                        ("/model", "bold kaicode.assistant"),
+                        (" and try again.\n", "kaicode.muted"),
+                        ("  Ollama models with tool support: ", "kaicode.muted"),
+                        ("llama3.1  llama3.2  qwen2.5-coder  mistral-nemo", "kaicode.info"),
                     ),
-                    border_style="yellow",
+                    border_style="kaicode.warning",
                     padding=(0, 1),
                 ))
                 return
@@ -184,13 +206,10 @@ class KaiApp:
                     system=self._system_prompt(),
                     tools=active_tools,
                 )
+                # Collect the full response silently — render it all at once after
                 async for chunk in stream:
                     if chunk.content:
-                        if not spinner_stopped:
-                            spinner.stop()
-                            spinner_stopped = True
                         assistant_content += chunk.content
-                        render_assistant_chunk(chunk.content)
                     if chunk.tool_call:
                         pending_tool_call = chunk.tool_call
                     if chunk.usage:
@@ -198,8 +217,9 @@ class KaiApp:
                     if chunk.done:
                         break
             except Exception as e:
-                if not spinner_stopped:
-                    spinner.stop()
+                if not live_stopped:
+                    live.stop()
+                    live_stopped = True
                 err = str(e)
                 if "does not support tools" in err.lower():
                     self._tools_disabled = True
@@ -207,12 +227,13 @@ class KaiApp:
                     self.session.messages.pop()
                     await self.chat(user_input)
                     return
-                if "not found" in err.lower() and self.provider_name == "ollama":
+                # Only auto-switch on a true HTTP 404 (model not installed in Ollama)
+                if "ollama error 404" in err.lower() and self.provider_name == "ollama":
                     available = await self.provider.list_models()
                     if available:
                         self.model = available[0]
                         self.session.model = self.model
-                        print_error(f"Model not found. Auto-switching to: {self.model}")
+                        print_error(f"Model '{self.model}' not found in Ollama. Auto-switching to: {self.model}")
                         self.print_header()
                         self.session.messages.pop()
                         await self.chat(user_input)
@@ -222,15 +243,19 @@ class KaiApp:
                 print_error(f"Provider error: {e}")
                 return
             finally:
-                if not spinner_stopped:
-                    spinner.stop()
+                if not live_stopped:
+                    live.stop()
 
             if usage:
                 tokens = usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0)
                 self._tokens_used += tokens
                 self.session.add_tokens(tokens)
 
+            # Render the full response at once now that we have it all
             if assistant_content:
+                console.print()
+                console.print(Text("  ◈", style="kaicode.assistant"))
+                render_assistant_message(assistant_content)
                 self.session.messages.append(
                     Message(role="assistant", content=assistant_content)
                 )
@@ -242,9 +267,8 @@ class KaiApp:
             console.print()
             tool_name = pending_tool_call.get("name", "")
             tool_args = pending_tool_call.get("input", {})
-            tool_id = pending_tool_call.get("id", "")
+            tool_id   = pending_tool_call.get("id", "")
 
-            # Permission check (pass the model's reasoning text as context)
             approved = await self._request_permission(
                 tool_name, tool_args, reason=assistant_content.strip()
             )
@@ -255,7 +279,6 @@ class KaiApp:
                 result = self.tool_registry.call(tool_name, tool_args)
                 print_tool_result(tool_name, result)
 
-            # Track diffs
             if tool_name == "edit_file":
                 try:
                     rdata = json.loads(result)
@@ -264,7 +287,6 @@ class KaiApp:
                 except json.JSONDecodeError:
                     pass
 
-            # Add tool result to messages (OpenAI format)
             self.session.messages.append(Message(
                 role="assistant",
                 content="",
@@ -279,12 +301,6 @@ class KaiApp:
                 content=result,
                 tool_results=[{"tool_use_id": tool_id, "content": result}],
             ))
-
-            console.print()
-            console.print(Text("KaiCode", style="kaicode.assistant"), end=" ")
-            console.print(Text("›", style="kaicode.prompt"), end=" ")
-
-        console.print()
 
     async def _request_permission(
         self, tool_name: str, tool_args: dict, reason: str = ""
@@ -333,11 +349,11 @@ class KaiApp:
         console.print()
         console.print(Panel(
             body,
-            title=f"[bold yellow] KaiCode wants permission [/]",
-            border_style="yellow",
+            title="[bold kaicode.warning] Permission required [/]",
+            border_style="kaicode.warning",
             padding=(0, 1),
         ))
-        console.print(Text("  Choose [1/2/3/4]: ", style="bold cyan"), end="")
+        console.print(Text("  Choose [1/2/3/4]: ", style="bold kaicode.assistant"), end="")
 
         try:
             answer = await asyncio.get_event_loop().run_in_executor(None, input)

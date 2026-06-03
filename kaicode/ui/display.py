@@ -2,39 +2,96 @@
 
 from __future__ import annotations
 
-import re
+import subprocess
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
+from rich.align import Align
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 from rich.table import Table
-from rich.columns import Columns
 from rich.tree import Tree
 from rich import box
 
-from kaicode.ui.theme import KAICODE_THEME, ASCII_LOGO, LOGO_COMPACT
+from kaicode.ui.theme import KAICODE_THEME, ASCII_LOGO, LOGO_COMPACT, KAICODE_VERSION
 
 
 console = Console(theme=KAICODE_THEME, highlight=False)
 
 
+_TOOL_ICONS = {
+    "read_file":        "○",
+    "edit_file":        "◈",
+    "create_file":      "◆",
+    "create_directory": "▸",
+    "list_files":       "▤",
+    "search_files":     "⊛",
+    "run_command":      "▶",
+    "git_status":       "⎇",
+    "git_diff":         "⎇",
+    "git_commit":       "⊙",
+}
+
+_MODEL_LABELS = {
+    "model-opus-4-8":           "Most capable",
+    "model-sonnet-4-6":         "Balanced performance",
+    "model-haiku-4-5-20251001": "Fast & efficient",
+    "model-3-5-sonnet-20241022":"Strong reasoning",
+    "model-3-5-haiku-20241022": "Fast",
+    "gpt-4o":                    "OpenAI flagship",
+    "gpt-4-turbo":               "GPT-4 Turbo",
+    "gpt-4o-mini":               "Fast & affordable",
+    "llama3.2":                  "Local · fast",
+    "llama3.1":                  "Local · capable",
+    "llama3.1:8b":               "Local · fast",
+    "qwen2.5-coder":             "Local · code-focused",
+    "mistral-nemo":              "Local · multilingual",
+    "deepseek-r1:8b":            "Local · reasoning",
+    "gemma4:latest":             "Local · Google",
+    "gpt-oss:20b":               "Local · large",
+    "llama-3.1-70b-versatile":   "Groq · fast",
+    "llama-3.3-70b-versatile":   "Groq · versatile",
+    "mixtral-8x7b-32768":        "Groq · large context",
+}
+
+
+def _get_git_branch(cwd: str | None = None) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=2,
+            cwd=cwd or ".",
+        )
+        if result.returncode == 0:
+            branch = result.stdout.strip()
+            return branch if branch != "HEAD" else ""
+    except Exception:
+        pass
+    return ""
+
+
 def print_header(model: str, provider: str, cwd: str) -> None:
-    """Print the KaiCode header bar."""
     cwd_short = str(Path(cwd).resolve())
     home = str(Path.home())
     if cwd_short.startswith(home):
         cwd_short = "~" + cwd_short[len(home):]
 
+    branch = _get_git_branch(cwd)
+
     header = Text()
     header.append(" ⟨ KaiCode ⟩ ", style="kaicode.logo")
     header.append("  ")
-    header.append(f"[{provider}] ", style="kaicode.assistant")
+    header.append(provider, style="kaicode.assistant")
+    header.append(" / ", style="kaicode.muted")
     header.append(model, style="kaicode.model")
     header.append("  ")
     header.append(cwd_short, style="kaicode.dir")
+    if branch:
+        header.append("  ")
+        header.append(f"({branch})", style="kaicode.branch")
     header.append("  ")
     header.append("by Kai Cyrus", style="kaicode.footer")
 
@@ -42,74 +99,62 @@ def print_header(model: str, provider: str, cwd: str) -> None:
 
 
 def print_splash() -> None:
-    """Print the splash screen."""
-    from rich.align import Align
-    logo_text = Text(ASCII_LOGO, style="kaicode.logo")
-    console.print(Align.center(logo_text))
-    console.print(
-        Align.center(Text("by Kai Cyrus  •  Multi-provider AI coding assistant", style="kaicode.footer"))
-    )
+    console.print(Align.center(Text(ASCII_LOGO, style="kaicode.logo")))
+
+    tagline = Text()
+    tagline.append(f"v{KAICODE_VERSION}", style="kaicode.footer")
+    tagline.append("  ·  ", style="kaicode.muted")
+    tagline.append("by Kai Cyrus", style="kaicode.footer")
+    tagline.append("  ·  ", style="kaicode.muted")
+    tagline.append("Multi-provider AI coding assistant", style="kaicode.info")
+    console.print(Align.center(tagline))
     console.print()
 
 
 def print_user_message(content: str) -> None:
-    """Print a user message."""
     console.print(Text("You", style="kaicode.user"), end=" ")
     console.print(Text("›", style="kaicode.prompt"), end=" ")
-    console.print(Text(content, style="white"))
+    console.print(Text(content))
 
 
 def render_assistant_chunk(chunk: str) -> None:
-    """Print a streaming chunk from the assistant."""
     console.print(chunk, end="", markup=False, highlight=False)
 
 
 def render_assistant_message(content: str) -> None:
-    """Render a complete assistant message with markdown."""
-    if _has_code_blocks(content):
-        _render_markdown(content)
+    if "```" in content or "`" in content:
+        console.print(Markdown(content, code_theme="monokai"))
     else:
-        console.print(Text(content, style="white"))
-
-
-def _has_code_blocks(text: str) -> bool:
-    return "```" in text or "`" in text
-
-
-def _render_markdown(text: str) -> None:
-    md = Markdown(text, code_theme="monokai")
-    console.print(md)
+        console.print(Text(content))
 
 
 def print_tool_call(tool_name: str, arguments: dict) -> None:
-    """Print a tool call being made."""
-    import json
-    args_str = json.dumps(arguments, indent=2)
-    if len(args_str) > 300:
-        args_str = args_str[:300] + "..."
+    icon   = _TOOL_ICONS.get(tool_name, "·")
+    detail = _summarize_args(tool_name, arguments)
 
-    content = Text()
-    content.append(f"  {tool_name}", style="kaicode.tool_call")
-    content.append(f"({_summarize_args(tool_name, arguments)})", style="dim white")
-
-    console.print(content)
+    line = Text()
+    line.append(f"  {icon}  ", style="kaicode.tool_call")
+    line.append(tool_name, style="bold kaicode.tool_call")
+    if detail:
+        line.append("  →  ", style="kaicode.muted")
+        line.append(detail, style="kaicode.dir")
+    console.print(line)
 
 
 def _summarize_args(tool_name: str, args: dict) -> str:
-    if tool_name in ("read_file", "edit_file", "create_file"):
+    if tool_name in ("read_file", "edit_file", "create_file", "create_directory"):
         return args.get("path", "")
     if tool_name == "run_command":
         cmd = args.get("command", "")
-        return cmd[:60] + "..." if len(cmd) > 60 else cmd
+        return ("$ " + cmd)[:70] + ("…" if len(cmd) > 68 else "")
     if tool_name == "search_files":
-        return f'"{args.get("pattern", "")}" in {args.get("path", ".")}'
+        return f'"{args.get("pattern","")}" in {args.get("path",".")}'
     if tool_name == "git_commit":
-        return f'"{args.get("message", "")}"'
+        return f'"{args.get("message","")}"'
     return str(args)[:60]
 
 
 def print_tool_result(tool_name: str, result: str) -> None:
-    """Print the result of a tool call."""
     import json
     try:
         data = json.loads(result)
@@ -117,7 +162,7 @@ def print_tool_result(tool_name: str, result: str) -> None:
         data = {"output": result}
 
     if "error" in data:
-        console.print(f"  [kaicode.error]✗ {data['error']}[/]")
+        console.print(Text(f"  ✗  {data['error']}", style="kaicode.error"))
         return
 
     if tool_name == "edit_file" and "diff" in data:
@@ -126,15 +171,14 @@ def print_tool_result(tool_name: str, result: str) -> None:
 
     if tool_name == "read_file" and "content" in data:
         path = data.get("path", "")
-        ext = Path(path).suffix.lstrip(".")
-        syntax = Syntax(
-            data["content"][:3000],
-            ext or "text",
-            theme="monokai",
-            line_numbers=True,
-            word_wrap=True,
-        )
-        console.print(Panel(syntax, title=f"[dim]{path}[/]", border_style="dim cyan", padding=(0, 1)))
+        ext  = Path(path).suffix.lstrip(".")
+        console.print(Panel(
+            Syntax(data["content"][:3000], ext or "text",
+                   theme="friendly", line_numbers=True, word_wrap=True),
+            title=f"[kaicode.dir]{path}[/]",
+            border_style="kaicode.separator",
+            padding=(0, 1),
+        ))
         return
 
     if tool_name == "list_files" and "entries" in data:
@@ -145,40 +189,39 @@ def print_tool_result(tool_name: str, result: str) -> None:
         _print_search_results(data)
         return
 
-    if tool_name in ("git_status",) and "branch" in data:
+    if tool_name == "git_status" and "branch" in data:
         _print_git_status(data)
         return
 
     if tool_name == "run_command":
         stdout = data.get("stdout", "").strip()
         stderr = data.get("stderr", "").strip()
-        rc = data.get("returncode", 0)
+        rc     = data.get("returncode", 0)
         if stdout:
             console.print(Panel(
-                Text(stdout[:2000], style="dim white"),
-                title=f"[dim]stdout (rc={rc})[/]",
-                border_style="dim green" if rc == 0 else "dim red",
+                Text(stdout[:2000]),
+                title=f"[kaicode.dir]stdout[/]  [{'kaicode.success' if rc == 0 else 'kaicode.error'}]rc={rc}[/]",
+                border_style="kaicode.success" if rc == 0 else "kaicode.error",
                 padding=(0, 1),
             ))
         if stderr:
             console.print(Panel(
-                Text(stderr[:1000], style="dim yellow"),
-                title="[dim]stderr[/]",
-                border_style="dim yellow",
+                Text(stderr[:1000], style="kaicode.warning"),
+                title="[kaicode.dir]stderr[/]",
+                border_style="kaicode.warning",
                 padding=(0, 1),
             ))
         return
 
-    console.print(Text(f"  ✓ {tool_name} completed", style="kaicode.tool_result"))
+    console.print(Text(f"  ✓  {tool_name} done", style="kaicode.tool_result"))
 
 
 def _print_diff(diff: str) -> None:
     if not diff:
-        console.print(Text("  (no changes)", style="dim"))
+        console.print(Text("  (no changes)", style="kaicode.muted"))
         return
-    lines = diff.splitlines()
     text = Text()
-    for line in lines:
+    for line in diff.splitlines():
         if line.startswith("+") and not line.startswith("+++"):
             text.append(line + "\n", style="kaicode.diff.add")
         elif line.startswith("-") and not line.startswith("---"):
@@ -186,64 +229,52 @@ def _print_diff(diff: str) -> None:
         elif line.startswith("@@"):
             text.append(line + "\n", style="kaicode.diff.header")
         else:
-            text.append(line + "\n", style="dim white")
-    console.print(Panel(text, title="[dim]diff[/]", border_style="dim cyan", padding=(0, 1)))
+            text.append(line + "\n", style="kaicode.dir")
+    console.print(Panel(text, title="[kaicode.dir]diff[/]",
+                        border_style="kaicode.separator", padding=(0, 1)))
 
 
 def _print_file_tree(data: dict) -> None:
     tree = Tree(f"[kaicode.file_tree.dir]{data['path']}[/]")
     nodes: dict[str, Any] = {"": tree}
-
     for entry in data.get("entries", [])[:100]:
-        parts = Path(entry["path"]).parts
+        parts      = Path(entry["path"]).parts
         parent_key = str(Path(*parts[:-1])) if len(parts) > 1 else ""
-        parent_node = nodes.get(parent_key, tree)
-
+        parent     = nodes.get(parent_key, tree)
         if entry["type"] == "dir":
-            style = "kaicode.file_tree.dir"
-            label = f"[{style}]{parts[-1]}/[/]"
+            label = f"[kaicode.file_tree.dir]{parts[-1]}/[/]"
         else:
-            size = entry.get("size", 0) or 0
-            size_str = f" [dim]{_human_size(size)}[/]" if size else ""
-            label = f"[kaicode.file_tree.file]{parts[-1]}[/]{size_str}"
-
-        node = parent_node.add(label)
-        nodes[entry["path"]] = node
-
+            size     = entry.get("size", 0) or 0
+            size_str = f" [kaicode.muted]{_human_size(size)}[/]" if size else ""
+            label    = f"[kaicode.file_tree.file]{parts[-1]}[/]{size_str}"
+        nodes[entry["path"]] = parent.add(label)
     console.print(tree)
 
 
 def _print_search_results(data: dict) -> None:
     results = data.get("results", [])
     if not results:
-        console.print(Text(f"  No results for '{data['pattern']}'", style="dim"))
+        console.print(Text(f"  No results for '{data['pattern']}'", style="kaicode.muted"))
         return
-
     table = Table(box=box.SIMPLE, show_header=True, header_style="kaicode.assistant")
-    table.add_column("File", style="cyan", no_wrap=True)
-    table.add_column("Line", style="dim", justify="right", width=6)
-    table.add_column("Content", style="white")
-
+    table.add_column("File",    style="kaicode.info",  no_wrap=True)
+    table.add_column("Line",    style="kaicode.muted", justify="right", width=6)
+    table.add_column("Content")
     for r in results[:30]:
         table.add_row(r["file"], str(r["line"]), r["content"][:100])
-
     if data.get("truncated"):
-        console.print(Text(f"  (showing first 30 of {data['total']} results)", style="dim"))
+        console.print(Text(f"  (showing first 30 of {data['total']} results)", style="kaicode.muted"))
     console.print(table)
 
 
 def _print_git_status(data: dict) -> None:
-    lines = Text()
-    lines.append(f"  Branch: ", style="dim")
-    lines.append(data.get("branch", "unknown"), style="bold cyan")
-    console.print(lines)
-
-    for item in data.get("staged", []):
-        console.print(Text(f"  + {item['file']}", style="kaicode.diff.add"))
-    for item in data.get("unstaged", []):
-        console.print(Text(f"  ~ {item['file']}", style="kaicode.warning"))
-    for f in data.get("untracked", []):
-        console.print(Text(f"  ? {f}", style="dim"))
+    line = Text()
+    line.append("  Branch  ", style="kaicode.muted")
+    line.append(data.get("branch", "unknown"), style="kaicode.branch")
+    console.print(line)
+    for item in data.get("staged",   []): console.print(Text(f"  + {item['file']}", style="kaicode.diff.add"))
+    for item in data.get("unstaged", []): console.print(Text(f"  ~ {item['file']}", style="kaicode.warning"))
+    for f    in data.get("untracked",[]): console.print(Text(f"  ? {f}",             style="kaicode.muted"))
     if data.get("clean"):
         console.print(Text("  Working tree clean", style="kaicode.success"))
 
@@ -257,71 +288,93 @@ def _human_size(size: int) -> str:
 
 
 def print_status(tokens_used: int, model: str, provider: str, status: str = "ready") -> None:
-    """Print the status bar."""
     bar = Text()
-    bar.append(" KaiCode ", style="kaicode.logo")
-    bar.append("│ ", style="dim")
-    bar.append(f"{provider}/{model} ", style="kaicode.model")
-    bar.append("│ ", style="dim")
-    bar.append(f"~{tokens_used:,} tokens ", style="kaicode.tokens")
-    bar.append("│ ", style="dim")
-    bar.append(status, style="kaicode.info")
-    bar.append(" │ ", style="dim")
-    bar.append("by Kai Cyrus", style="kaicode.footer")
+    bar.append(" ◈ ",                    style="kaicode.assistant")
+    bar.append(f"{provider}",            style="kaicode.info")
+    bar.append(" / ",                    style="kaicode.muted")
+    bar.append(f"{model}",               style="kaicode.model")
+    bar.append("  ·  ",                  style="kaicode.muted")
+    bar.append(f"~{tokens_used:,} tok",  style="kaicode.tokens")
+    bar.append("  ·  ",                  style="kaicode.muted")
+    bar.append(status,                   style="kaicode.info")
+    bar.append("  ·  ",                  style="kaicode.muted")
+    bar.append("by Kai Cyrus",           style="kaicode.footer")
     console.rule(bar, style="kaicode.separator")
 
 
 def print_error(msg: str) -> None:
-    console.print(Text(f"✗ {msg}", style="kaicode.error"))
+    console.print(Text(f"  ✗  {msg}", style="kaicode.error"))
 
 
 def print_info(msg: str) -> None:
-    console.print(Text(f"  {msg}", style="kaicode.info"))
+    console.print(Text(f"  ·  {msg}", style="kaicode.info"))
 
 
 def print_success(msg: str) -> None:
-    console.print(Text(f"✓ {msg}", style="kaicode.success"))
+    console.print(Text(f"  ✓  {msg}", style="kaicode.success"))
 
 
 def print_help() -> None:
-    """Print help text."""
-    table = Table(title="KaiCode Commands", box=box.ROUNDED, border_style="cyan")
-    table.add_column("Command", style="bold cyan", width=18)
-    table.add_column("Description", style="white")
+    table = Table(
+        title=" KaiCode Commands ",
+        box=box.ROUNDED,
+        border_style="kaicode.separator",
+        title_style="bold kaicode.logo",
+        header_style="kaicode.muted",
+        show_lines=False,
+        pad_edge=True,
+        padding=(0, 1),
+    )
+    table.add_column("Command",     style="bold kaicode.assistant", width=20)
+    table.add_column("Description")
 
-    commands = [
-        ("/model [name]", "Switch AI model (shows picker if no name given)"),
-        ("/provider [name]", "Switch AI provider"),
-        ("/clear", "Clear conversation history"),
-        ("/diff", "Show the last applied diff"),
-        ("/apply", "Apply the last suggested code change"),
-        ("/reject", "Reject the last suggested change"),
-        ("/save [name]", "Save current session"),
-        ("/load [name]", "Load a saved session"),
-        ("/sessions", "List saved sessions"),
-        ("/context", "Show files loaded into context"),
-        ("/status", "Show current status (tokens, model, etc.)"),
-        ("/quit", "Exit KaiCode"),
-        ("/help", "Show this help message"),
+    sections = [
+        ("Models & Providers", ""),
+        ("/model [name]",    "Switch model — shows picker if no name given"),
+        ("/provider [name]", "Switch provider — ollama / openai / openai / groq"),
+        ("Sessions", ""),
+        ("/save [name]",     "Save current conversation"),
+        ("/load <name>",     "Load a saved conversation"),
+        ("/sessions",        "List all saved sessions"),
+        ("Context & Code", ""),
+        ("/diff",            "Show the last applied diff"),
+        ("/context",         "Show auto-detected context files"),
+        ("Conversation", ""),
+        ("/clear",           "Clear conversation history"),
+        ("/status",          "Show tokens, model, and provider"),
+        ("/help",            "Show this help"),
+        ("/quit",            "Exit KaiCode"),
     ]
-    for cmd, desc in commands:
-        table.add_row(cmd, desc)
+    for item in sections:
+        if item[1] == "":
+            table.add_section()
+            table.add_row(f"[kaicode.muted italic]{item[0]}[/]", "")
+        else:
+            table.add_row(item[0], item[1])
 
+    console.print()
     console.print(table)
     console.print()
 
-    perm_table = Table(title="Tool Permissions", box=box.ROUNDED, border_style="dim cyan")
-    perm_table.add_column("Option", style="bold cyan", width=6)
-    perm_table.add_column("Meaning", style="white")
-    perm_table.add_row("1", "Yes, do it")
-    perm_table.add_row("2", "No, skip this action")
-    perm_table.add_row("3", "Yes, and always allow this tool type for the session")
-    perm_table.add_row("4", "Yes, and allow ALL tools for the session (no more prompts)")
-    console.print(perm_table)
+    perm = Table(
+        title=" Tool Permissions ",
+        box=box.ROUNDED,
+        border_style="kaicode.separator",
+        title_style="bold kaicode.tool_call",
+        header_style="kaicode.muted",
+        padding=(0, 1),
+    )
+    perm.add_column("Key",    style="bold kaicode.assistant", width=5, justify="center")
+    perm.add_column("Action")
+    perm.add_row("1", "Yes, do it")
+    perm.add_row("2", "No, skip this action")
+    perm.add_row("3", "Yes, always allow this tool for the session")
+    perm.add_row("4", "Yes, allow all tools for the session")
+    console.print(perm)
     console.print()
 
-    console.print(Text("Tips:", style="bold cyan"))
-    console.print(Text("  • Read-only tools (read_file, search, git status) run without asking", style="dim white"))
-    console.print(Text("  • Write/execute tools always ask first, like KaiCode", style="dim white"))
-    console.print(Text("  • Use /model to switch between local (Ollama) and cloud models", style="dim white"))
+    console.print(Text("  Tips", style="bold kaicode.assistant"))
+    console.print(Text("  ·  Read-only tools (read_file, search, git status) run without asking", style="kaicode.muted"))
+    console.print(Text("  ·  Write and execute tools always ask for permission first",            style="kaicode.muted"))
+    console.print(Text("  ·  Use /model to switch between local Ollama models and cloud APIs",   style="kaicode.muted"))
     console.print()
