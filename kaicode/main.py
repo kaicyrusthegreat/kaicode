@@ -39,39 +39,31 @@ from kaicode.session import Session, SESSIONS_DIR
 HISTORY_FILE = Path.home() / ".kaicode" / "history"
 
 PT_STYLE = PTStyle.from_dict({
-    "prompt":         "bold",
-    "":               "default",
+    "prompt":         "fg:#43a047 bold",   # green prompt symbol
+    "":               "bg:#0d2010 fg:#e8f5e9",  # dark green bg, light text
     "bottom-toolbar": "noreverse",
 })
 
 
 def _make_toolbar(app):
-    """Four-row toolbar: box bottom · status · separator · hints."""
+    """Three-row toolbar: status · separator · hints."""
     def _toolbar():
         width = shutil.get_terminal_size((80, 20)).columns
-        inner = width - 2
-        half  = inner // 2
         sep   = "─" * width
         tok   = f"~{app.tokens_used:,} tok" if app.tokens_used else "0 tok"
 
         return FormattedText([
-            # Row 1: bottom of the rounded input box (green→red gradient)
-            ("fg:#43a047",      "╰"),
-            ("fg:#43a047",      "─" * half),
-            ("fg:#e53935",      "─" * (inner - half)),
-            ("fg:#e53935",      "╯"),
-            ("",                "\n"),
-            # Row 2: status info
+            # Row 1: status info
             ("fg:#555555",      "  ◈  "),
             ("fg:#00838f",      f"{app.provider_name}"),
             ("fg:#444444",      " / "),
             ("fg:#e65100 bold", f"{app.model}"),
             ("fg:#555555",      f"  ·  {tok}  ·  by Kai Cyrus"),
             ("",                "\n"),
-            # Row 3: separator
+            # Row 2: separator
             ("fg:#3a3a3a",      sep),
             ("",                "\n"),
-            # Row 4: hints
+            # Row 3: hints
             ("fg:#2196f3 bold", " ⏵⏵ accept edits on"),
             ("fg:#666666",      "  (shift+tab to cycle)  ·  ← for agents"),
         ])
@@ -98,28 +90,12 @@ async def run_interactive(app) -> None:
 
     while True:
         try:
-            # Top border: green → red rounded box
-            w     = shutil.get_terminal_size((80, 20)).columns
-            inner = w - 2
-            half  = inner // 2
-            top   = Text()
-            top.append("╭",            style="#43a047")
-            top.append("─" * half,     style="#43a047")
-            top.append("─" * (inner - half), style="#e53935")
-            top.append("╮",            style="#e53935")
-            console.print(top)
-
-            # Prompt with green left border │
-            prompt_fmt = FormattedText([
-                ("fg:#43a047 bold", "│"),
-                ("",               "  › "),
-            ])
             user_input = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: ps.prompt(prompt_fmt, style=PT_STYLE),
+                lambda: ps.prompt("  › ", style=PT_STYLE),
             )
-            # Erase top border + prompt echo (2 lines up → erase → down → erase → back up)
-            sys.stdout.write('\x1b[2A\x1b[2K\r\x1b[1B\x1b[2K\r\x1b[1A')
+            # Erase the prompt echo — message shows only in its bubble
+            sys.stdout.write('\x1b[1A\x1b[2K\r')
             sys.stdout.flush()
         except (KeyboardInterrupt, EOFError):
             console.print()
