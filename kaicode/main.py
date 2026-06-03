@@ -302,7 +302,7 @@ async def _pick_model(models: list[str], app) -> None:
 @click.option("--model", "-m", default=None, help="Model name")
 @click.option("--session", "-s", default=None, help="Load a saved session")
 @click.option("--config", "-c", "config_path", default=None, help="Path to config file")
-@click.version_option(version="1.2.1", prog_name="kaicode")
+@click.version_option(version="1.3.0", prog_name="kaicode")
 @click.argument("prompt", nargs=-1)
 def main(provider, model, session, config_path, prompt):
     """KaiCode — Terminal AI coding assistant.\n\nSupports Ollama, OpenAI, OpenAI, Groq, and any OpenAI-compatible API."""
