@@ -29,7 +29,10 @@ class OllamaProvider(BaseProvider):
         if system:
             msgs.append({"role": "system", "content": system})
         for m in messages:
-            msgs.append({"role": m.role, "content": m.content})
+            msg: dict = {"role": m.role, "content": m.content}
+            if m.tool_calls:
+                msg["tool_calls"] = m.tool_calls
+            msgs.append(msg)
 
         payload: dict[str, Any] = {
             "model": model,

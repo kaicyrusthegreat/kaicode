@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -30,18 +31,39 @@ from kaicode.ui.display import (
     print_success,
     print_kai_message,
     print_plan,
-    print_status,
-    print_help,
 )
 
 
 MAX_TOOL_ITERATIONS = 10
+MAX_HISTORY_MESSAGES = 50   # trim older messages beyond this
+
+# ── Tool selection ────────────────────────────────────────────────────────────
+
+_CORE_TOOL_NAMES = {
+    "read_file", "edit_file", "create_file", "create_directory",
+    "list_files", "search_files", "run_command",
+}
+
+def _select_tools(message: str) -> list[dict]:
+    """Return the relevant tool subset. Core tools always; extras only when hinted."""
+    lower = message.lower()
+    names = set(_CORE_TOOL_NAMES)
+    if any(w in lower for w in ("git", "commit", "push", "branch", "diff", "staged", "merge")):
+        names |= {"git_status", "git_commit", "git_diff"}
+    if any(w in lower for w in ("test", "spec", "pytest", "unittest", "jest", "flutter test")):
+        names.add("run_tests")
+    if any(w in lower for w in ("memory", "remember", "note", "save for later")):
+        names.add("update_memory")
+    if any(w in lower for w in ("symbol", "function", "class", "def ", "struct", "interface", "ast")):
+        names.add("grep_ast")
+    if any(w in lower for w in ("http", "url", "web", "doc", "fetch", "documentation", "api reference")):
+        names.add("web_fetch")
+    return [t for t in TOOL_DEFINITIONS if t["function"]["name"] in names]
 
 
-import re as _re
+# ── Intent heuristics ─────────────────────────────────────────────────────────
 
-# Patterns that signal a purely conversational or conceptual message — no tools needed.
-_CHAT_RE = _re.compile(
+_CHAT_RE = re.compile(
     r'^(?:'
     r'hi|hello|hey|yo|sup|howdy|'
     r'thanks|thank you|ty|thx|'
@@ -56,40 +78,72 @@ _CHAT_RE = _re.compile(
     r'what do you\b|what\'s the difference\b|'
     r'lol|haha|hehe'
     r')',
-    _re.I,
+    re.I,
 )
 
-_HAS_TASK = _re.compile(
-    r'(?:^|[\s"])/[\w./]+'                       # /unix/path
+_HAS_TASK = re.compile(
+    r'(?:^|[\s"])/[\w./]+'
     r'|\b[\w./\-]+\.(?:py|js|ts|dart|go|rs|rb|java|kt|tsx|jsx|vue|'
-    r'yaml|yml|json|toml|md|sh|css|html|swift|cs|cpp|c|h)\b'  # filename.ext
+    r'yaml|yml|json|toml|md|sh|css|html|swift|cs|cpp|c|h)\b'
     r'|\b(?:'
     r'file|folder|dir(?:ectory)?|create|make|edit|update|fix|refactor|'
     r'read|write|delete|remove|rename|move|copy|'
     r'run|execute|install|build|compile|test|commit|push|'
     r'search|find|grep|implement|add|generate|scaffold'
     r')\b',
-    _re.I,
+    re.I,
 )
 
 def _needs_tools(message: str) -> bool:
-    """True when the message is likely a task that requires tool access."""
     msg = message.strip()
-    # Always give tools if there's a clear task indicator
     if _HAS_TASK.search(msg):
         return True
-    # Suppress tools for short conversational/conceptual messages
     if _CHAT_RE.match(msg) and len(msg) < 120:
         return False
-    # Short message with no task signal → probably chatting
     if len(msg) < 30:
         return False
     return True
 
+def _is_real_plan(text: str) -> bool:
+    """True only when the model wrote a genuine numbered list (2+ steps)."""
+    items = re.findall(r'(?:^|\n)\s*[1-9]\d*[.)]\s+\w', text)
+    return len(items) >= 2
+
+
+# ── Permission helpers ────────────────────────────────────────────────────────
+
+_AUTO_APPROVE_TOOLS = {
+    "read_file", "list_files", "search_files",
+    "git_status", "git_diff",
+    "grep_ast",      # read-only symbol search
+    "web_fetch",     # read-only URL fetch
+    "update_memory", # user's own persistent notes
+}
+
+_TOOL_ACTION_LABELS = {
+    "edit_file":        "Edit file",
+    "create_file":      "Create file",
+    "create_directory": "Create directory",
+    "run_command":      "Run command",
+    "git_commit":       "Git commit",
+    "run_tests":        "Run test suite",
+}
+
+def _format_permission_detail(tool_name: str, args: dict) -> str:
+    if tool_name in ("edit_file", "create_file", "create_directory"):
+        return args.get("path", "?")
+    if tool_name == "run_command":
+        return f"$ {args.get('command', '?')}"
+    if tool_name == "git_commit":
+        return f'git commit -m "{args.get("message", "?")}"'
+    if tool_name == "run_tests":
+        return args.get("command", "auto-detect")
+    return str(args)[:80]
+
+
+# ── Streaming status display ──────────────────────────────────────────────────
 
 class _StreamStatus:
-    """Live display shown while the AI is generating a response."""
-
     _PHASES = ["Thinking", "Reasoning", "Deciphering", "Processing"]
 
     def __init__(self, label: str = "") -> None:
@@ -101,51 +155,15 @@ class _StreamStatus:
 
     def __rich__(self) -> Text:
         elapsed = self._elapsed()
-        if self._label:
-            phase = self._label
-        else:
-            phase = self._PHASES[min(elapsed // 6, len(self._PHASES) - 1)]
-
+        phase = self._label or self._PHASES[min(elapsed // 6, len(self._PHASES) - 1)]
         t = Text()
         t.append("  ✽ ", style="kaicode.assistant")
         t.append(f"{phase}… ", style="kaicode.info")
         t.append(f"({elapsed}s)", style="kaicode.muted")
         return t
 
-# Tools that are read-only and safe to run without asking
-_AUTO_APPROVE_TOOLS = {
-    "read_file",
-    "list_files",
-    "search_files",
-    "git_status",
-    "git_diff",
-}
 
-# Human-readable descriptions for the permission prompt
-_TOOL_ACTION_LABELS = {
-    "edit_file":        "Edit file",
-    "create_file":      "Create file",
-    "create_directory": "Create directory",
-    "run_command":      "Run command",
-    "git_commit":       "Git commit",
-}
-
-def _format_permission_detail(tool_name: str, args: dict) -> str:
-    """One-line summary of what the tool will do."""
-    if tool_name == "edit_file":
-        return args.get("path", "?")
-    if tool_name == "create_file":
-        return args.get("path", "?")
-    if tool_name == "create_directory":
-        return args.get("path", "?")
-    if tool_name == "run_command":
-        return f"$ {args.get('command', '?')}"
-    if tool_name == "git_commit":
-        return f'git commit -m "{args.get("message", "?")}"'
-    return str(args)[:80]
-
-
-
+# ── Main application ──────────────────────────────────────────────────────────
 
 class KaiApp:
     def __init__(self, config: KaiConfig, provider_name: str | None = None, model: str | None = None) -> None:
@@ -155,18 +173,14 @@ class KaiApp:
         self.model = model or config.get_provider(self.provider_name).default_model or self._default_model()
         self.cwd = os.getcwd()
         self.session = Session(
-            name="",
-            provider=self.provider_name,
-            model=self.model,
-            cwd=self.cwd,
+            name="", provider=self.provider_name, model=self.model, cwd=self.cwd,
         )
         self.project_info = detect_project(self.cwd)
         self.tool_registry = ToolRegistry(cwd=self.cwd)
         self.last_diff: str = ""
-        self.last_suggestion: str = ""
         self._tokens_used: int = 0
-        self._always_allowed: set[str] = set()  # tools approved with "a" this session
-        self._tools_disabled: bool = False      # True when model doesn't support tools
+        self._always_allowed: set[str] = set()
+        self._tools_disabled: bool = False
 
     def _default_model(self) -> str:
         defaults = {
@@ -182,20 +196,30 @@ class KaiApp:
         print_header(self.model, self.provider_name, self.cwd)
 
     def _system_prompt(self) -> str:
-        base = build_system_prompt(self.project_info, self.config.system_prompt)
-        return base
+        return build_system_prompt(self.project_info, self.config.system_prompt)
+
+    def _trim_messages(self, messages: list[Message]) -> list[Message]:
+        """Keep history within MAX_HISTORY_MESSAGES, never split mid-tool-call."""
+        if len(messages) <= MAX_HISTORY_MESSAGES:
+            return messages
+        trimmed = messages[-MAX_HISTORY_MESSAGES:]
+        # Don't start on a tool result — shift until we find user/assistant
+        while trimmed and trimmed[0].role == "tool":
+            trimmed = trimmed[1:]
+        return trimmed
 
     def _find_relevant_files(self, user_input: str) -> list[tuple[str, str]]:
-        """Auto-detect files relevant to the user's message and return (path, content) pairs."""
-        import re
-        MAX_FILES    = 3
-        MAX_CHARS    = 2500
+        """Auto-detect files relevant to the user's message."""
+        MAX_FILES = 3
+        MAX_CHARS = 2500
         found: dict[str, str] = {}
 
-        # Extract: `backtick` items, file.ext patterns, symbols after keywords
         backtick  = re.findall(r'`([^`]+)`', user_input)
-        file_refs = re.findall(r'\b([\w./\-]+\.(?:py|js|ts|dart|go|rs|rb|java|kt|swift|tsx|jsx|vue|css|yaml|yml|json|toml|md))\b', user_input)
-        sym_refs  = re.findall(
+        file_refs = re.findall(
+            r'\b([\w./\-]+\.(?:py|js|ts|dart|go|rs|rb|java|kt|swift|tsx|jsx|vue|css|yaml|yml|json|toml|md))\b',
+            user_input
+        )
+        sym_refs = re.findall(
             r'(?:in|the|function|class|method|def|fix|update|edit|read|check|look at)\s+["\']?([\w_]{3,})["\']?',
             user_input, re.I
         )
@@ -223,7 +247,6 @@ class KaiApp:
             except Exception:
                 pass
 
-        # 1. Try direct file path references
         for candidate in (backtick + file_refs):
             if len(found) >= MAX_FILES:
                 break
@@ -233,7 +256,6 @@ class KaiApp:
             else:
                 _search_and_read(re.escape(candidate))
 
-        # 2. Try symbol search for identifiers
         for sym in sym_refs:
             if len(found) >= MAX_FILES:
                 break
@@ -243,20 +265,25 @@ class KaiApp:
 
     async def chat(self, user_input: str) -> None:
         """Process one user turn through the agentic loop."""
-        # Auto-load files relevant to the message
-        relevant = self._find_relevant_files(user_input)
+        # ── Build context ──────────────────────────────────────────────────
+        # Only search for relevant files on task messages (not chat)
+        if _needs_tools(user_input):
+            relevant = self._find_relevant_files(user_input)
+        else:
+            relevant = []
+
         if relevant:
             names = ", ".join(p for p, _ in relevant)
             print_info(f"Auto-loaded: {names}")
-            context_block = "\n\n".join(
-                f"<file path=\"{p}\">\n{content}\n</file>"
-                for p, content in relevant
-            )
-            augmented = f"{user_input}\n\n<auto_context>\n{context_block}\n</auto_context>"
+            ctx = "\n\n".join(f"<file path=\"{p}\">\n{c}\n</file>" for p, c in relevant)
+            augmented = f"{user_input}\n\n<auto_context>\n{ctx}\n</auto_context>"
         else:
             augmented = user_input
 
         self.session.messages.append(Message(role="user", content=augmented))
+
+        # Cache system prompt once — don't rebuild on every tool iteration
+        system_prompt = self._system_prompt()
 
         for iteration in range(MAX_TOOL_ITERATIONS):
             assistant_content = ""
@@ -265,47 +292,41 @@ class KaiApp:
             live_stopped = False
 
             label = "Working" if iteration > 0 else ""
-            live = Live(
-                _StreamStatus(label),
-                console=console,
-                transient=True,
-                refresh_per_second=10,
-            )
+            live = Live(_StreamStatus(label), console=console, transient=True, refresh_per_second=10)
             live.start()
 
             if self._tools_disabled and iteration == 0 and _needs_tools(user_input):
                 live.stop()
                 live_stopped = True
-                console.print()
                 console.print(Panel(
                     Text.assemble(
                         ("  ⚠  ", "kaicode.warning"),
-                        (f"'{self.model}' doesn't support tools — KaiCode can't take actions.\n\n", "default"),
-                        ("  Switch to a tool-capable model with ", "kaicode.muted"),
+                        (f"'{self.model}' doesn't support tools.\n\n", "default"),
+                        ("  Switch with ", "kaicode.muted"),
                         ("/model", "bold kaicode.assistant"),
                         (" and try again.\n", "kaicode.muted"),
-                        ("  Ollama models with tool support: ", "kaicode.muted"),
-                        ("llama3.1  llama3.2  qwen2.5-coder  mistral-nemo", "kaicode.info"),
                     ),
-                    border_style="kaicode.warning",
-                    padding=(0, 1),
+                    border_style="kaicode.warning", padding=(0, 1),
                 ))
                 return
 
+            # Select relevant tools (not all 13 every time)
             active_tools = (
                 None if self._tools_disabled
-                else TOOL_DEFINITIONS if _needs_tools(user_input)
+                else _select_tools(user_input) if _needs_tools(user_input)
                 else None
             )
 
+            # Trim history to fit context window
+            trimmed_messages = self._trim_messages(self.session.messages)
+
             try:
                 stream = self.provider.stream_chat(
-                    messages=self.session.messages,
+                    messages=trimmed_messages,
                     model=self.model,
-                    system=self._system_prompt(),
+                    system=system_prompt,   # reused, not rebuilt
                     tools=active_tools,
                 )
-                # Collect the full response silently — render it all at once after
                 async for chunk in stream:
                     if chunk.content:
                         assistant_content += chunk.content
@@ -322,17 +343,16 @@ class KaiApp:
                 err = str(e)
                 if "does not support tools" in err.lower():
                     self._tools_disabled = True
-                    print_info(f"'{self.model}' doesn't support tools — switching to text-only mode.")
+                    print_info(f"'{self.model}' doesn't support tools — text-only mode.")
                     self.session.messages.pop()
                     await self.chat(user_input)
                     return
-                # Only auto-switch on a true HTTP 404 (model not installed in Ollama)
                 if "ollama error 404" in err.lower() and self.provider_name == "ollama":
                     available = await self.provider.list_models()
                     if available:
                         self.model = available[0]
                         self.session.model = self.model
-                        print_error(f"Model '{self.model}' not found in Ollama. Auto-switching to: {self.model}")
+                        print_error(f"Model not found. Switching to: {self.model}")
                         self.print_header()
                         self.session.messages.pop()
                         await self.chat(user_input)
@@ -350,43 +370,41 @@ class KaiApp:
                 self._tokens_used += tokens
                 self.session.add_tokens(tokens)
 
-            # If the model wrote a plan before calling a tool, show it and ask to proceed
+            # ── Plan detection: only interrupt for real numbered plans ──────
             if assistant_content and pending_tool_call and iteration == 0:
-                print_plan(assistant_content)
-                self.session.messages.append(
-                    Message(role="assistant", content=assistant_content)
-                )
-                console.print()
-                console.print(Text("  Proceed with this plan? [Y/n]: ", style="bold kaicode.warning"), end="")
-                try:
-                    answer = await asyncio.get_event_loop().run_in_executor(None, input)
-                except (KeyboardInterrupt, EOFError):
+                if _is_real_plan(assistant_content):
+                    # Real multi-step plan — show and ask to confirm
+                    print_plan(assistant_content)
+                    self.session.messages.append(Message(role="assistant", content=assistant_content))
                     console.print()
-                    return
-                if answer.strip().lower() in ("n", "no"):
-                    print_info("Plan cancelled.")
-                    return
-                # Confirmed — continue to tool execution below
+                    console.print(Text("  Proceed with this plan? [Y/n]: ", style="bold kaicode.warning"), end="")
+                    try:
+                        answer = await asyncio.get_event_loop().run_in_executor(None, input)
+                    except (KeyboardInterrupt, EOFError):
+                        console.print()
+                        return
+                    if answer.strip().lower() in ("n", "no"):
+                        print_info("Plan cancelled.")
+                        return
+                else:
+                    # Single-sentence preamble — show it but don't block execution
+                    print_kai_message(assistant_content)
+                    self.session.messages.append(Message(role="assistant", content=assistant_content))
 
             elif assistant_content:
-                # Normal response with no pending tool call on first pass
                 print_kai_message(assistant_content)
-                self.session.messages.append(
-                    Message(role="assistant", content=assistant_content)
-                )
+                self.session.messages.append(Message(role="assistant", content=assistant_content))
 
             if not pending_tool_call:
                 break
 
-            # Handle tool call
+            # ── Execute tool ───────────────────────────────────────────────
             console.print()
             tool_name = pending_tool_call.get("name", "")
             tool_args = pending_tool_call.get("input", {})
             tool_id   = pending_tool_call.get("id", "")
 
-            approved = await self._request_permission(
-                tool_name, tool_args, reason=assistant_content.strip()
-            )
+            approved = await self._request_permission(tool_name, tool_args, reason=assistant_content.strip())
             if not approved:
                 result = json.dumps({"error": "User denied this action."})
             else:
@@ -402,32 +420,26 @@ class KaiApp:
                     if rdata.get("success"):
                         verify_err = self._verify_file(tool_args.get("path", ""))
                         if verify_err:
-                            print_error(f"Syntax check failed — feeding error back to model")
+                            print_error("Syntax check failed — feeding error back to model")
                             console.print(Text(f"  {verify_err}", style="kaicode.error"))
                             result = json.dumps({**rdata, "syntax_error": verify_err,
-                                "note": "The edit was saved but has a syntax error. Please fix it."})
+                                "note": "Edit saved but has a syntax error. Please fix it."})
                         else:
                             print_success("Syntax OK")
                 except json.JSONDecodeError:
                     pass
 
             self.session.messages.append(Message(
-                role="assistant",
-                content="",
-                tool_calls=[{
-                    "id": tool_id,
-                    "type": "function",
-                    "function": {"name": tool_name, "arguments": json.dumps(tool_args)},
-                }],
+                role="assistant", content="",
+                tool_calls=[{"id": tool_id, "type": "function",
+                             "function": {"name": tool_name, "arguments": json.dumps(tool_args)}}],
             ))
             self.session.messages.append(Message(
-                role="tool",
-                content=result,
+                role="tool", content=result,
                 tool_results=[{"tool_use_id": tool_id, "content": result}],
             ))
 
     def _verify_file(self, path: str) -> str | None:
-        """Run a quick syntax/compile check after editing a file. Returns error or None."""
         import subprocess, sys
         ext = Path(path).suffix.lower()
         checks: dict[str, list[str]] = {
@@ -447,63 +459,40 @@ class KaiApp:
             if r.returncode != 0:
                 err = (r.stderr or r.stdout).strip()
                 return err[:600] if err else f"Syntax check failed (exit {r.returncode})"
-        except FileNotFoundError:
-            pass  # checker not installed — skip silently
-        except Exception:
+        except (FileNotFoundError, Exception):
             pass
         return None
 
-    async def _request_permission(
-        self, tool_name: str, tool_args: dict, reason: str = ""
-    ) -> bool:
-        """Ask the user to approve a tool call. Returns True if approved."""
-        if tool_name in _AUTO_APPROVE_TOOLS:
-            return True
-        if tool_name in self._always_allowed:
+    async def _request_permission(self, tool_name: str, tool_args: dict, reason: str = "") -> bool:
+        if tool_name in _AUTO_APPROVE_TOOLS or tool_name in self._always_allowed:
             return True
 
-        label = _TOOL_ACTION_LABELS.get(tool_name, tool_name)
+        label  = _TOOL_ACTION_LABELS.get(tool_name, tool_name)
         detail = _format_permission_detail(tool_name, tool_args)
 
-        # Build the permission panel content
         body = Text()
-
-        # What it wants to do
         body.append("  What:  ", style="bold cyan")
         body.append(f"{label}\n", style="bold white")
-
-        # The specific action detail
         body.append("  Action: ", style="bold cyan")
         body.append(f"{detail}\n", style="yellow")
 
-        # Why (from the model's reasoning text before the tool call)
         if reason:
-            # Trim to first 2 sentences to keep it concise
             sentences = reason.replace("\n", " ").split(". ")
-            short_reason = ". ".join(sentences[:2]).strip()
-            if len(short_reason) > 200:
-                short_reason = short_reason[:200] + "…"
+            short = ". ".join(sentences[:2]).strip()
+            if len(short) > 200:
+                short = short[:200] + "…"
             body.append("\n  Why:   ", style="bold cyan")
-            body.append(f"{short_reason}\n", style="dim white")
+            body.append(f"{short}\n", style="dim white")
 
-        # Numbered options
         body.append("\n")
-        body.append("  1. ", style="bold green")
-        body.append("Yes, do it\n", style="white")
-        body.append("  2. ", style="bold red")
-        body.append("No, skip this action\n", style="white")
-        body.append("  3. ", style="bold cyan")
-        body.append(f"Yes, and always allow '{tool_name}' this session\n", style="white")
-        body.append("  4. ", style="bold magenta")
-        body.append("Yes, and allow ALL tools this session\n", style="white")
+        body.append("  1. ", style="bold green");   body.append("Yes, do it\n")
+        body.append("  2. ", style="bold red");     body.append("No, skip\n")
+        body.append("  3. ", style="bold cyan");    body.append(f"Yes, always allow '{tool_name}'\n")
+        body.append("  4. ", style="bold magenta"); body.append("Yes, allow ALL tools this session\n")
 
         console.print()
-        console.print(Panel(
-            body,
-            title="[bold kaicode.warning] Permission required [/]",
-            border_style="kaicode.warning",
-            padding=(0, 1),
-        ))
+        console.print(Panel(body, title="[bold kaicode.warning] Permission required [/]",
+                            border_style="kaicode.warning", padding=(0, 1)))
         console.print(Text("  Choose [1/2/3/4]: ", style="bold kaicode.assistant"), end="")
 
         try:
@@ -513,20 +502,17 @@ class KaiApp:
             return False
 
         answer = answer.strip().lower()
-
         if answer in ("1", "y", "yes", ""):
             return True
-        elif answer in ("3", "a", "always"):
+        if answer in ("3", "a", "always"):
             self._always_allowed.add(tool_name)
             print_info(f"Always allowing '{tool_name}' this session.")
             return True
-        elif answer in ("4", "!"):
+        if answer in ("4", "!"):
             self._always_allowed.update(_TOOL_ACTION_LABELS.keys())
             print_info("Always allowing all tools this session.")
             return True
-        else:
-            # 2, n, no, or anything else
-            return False
+        return False
 
     async def list_models(self) -> list[str]:
         return await self.provider.list_models()
@@ -545,7 +531,7 @@ class KaiApp:
         self.session.provider = provider_name
         self.session.model = self.model
         self._tools_disabled = False
-        print_success(f"Switched to provider: {provider_name} / {self.model}")
+        print_success(f"Switched to: {provider_name} / {self.model}")
         self.print_header()
 
     def clear_history(self) -> None:
@@ -555,8 +541,7 @@ class KaiApp:
         print_info("Conversation cleared.")
 
     def save_session(self, name: str | None = None) -> None:
-        path = self.session.save(name)
-        print_success(f"Session saved: {path}")
+        print_success(f"Session saved: {self.session.save(name)}")
 
     def load_session(self, name: str) -> None:
         try:
@@ -573,5 +558,3 @@ class KaiApp:
     @property
     def tokens_used(self) -> int:
         return self._tokens_used
-
-

@@ -48,7 +48,12 @@ class Session:
             "updated_at": self.updated_at,
             "metadata": self.metadata,
             "messages": [
-                {"role": m.role, "content": m.content}
+                {
+                    "role": m.role,
+                    "content": m.content,
+                    **({"tool_calls":   m.tool_calls}   if m.tool_calls   else {}),
+                    **({"tool_results": m.tool_results} if m.tool_results else {}),
+                }
                 for m in self.messages
             ],
         }
@@ -71,7 +76,12 @@ class Session:
             metadata=data.get("metadata", {}),
         )
         for m in data.get("messages", []):
-            session.messages.append(Message(role=m["role"], content=m["content"]))
+            session.messages.append(Message(
+                role=m["role"],
+                content=m["content"],
+                tool_calls=m.get("tool_calls", []),
+                tool_results=m.get("tool_results", []),
+            ))
         return session
 
     @classmethod

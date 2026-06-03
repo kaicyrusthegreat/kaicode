@@ -137,10 +137,10 @@ def build_system_prompt(project_info: ProjectInfo, extra: str = "") -> str:
 
     # Inject actual file contents for key project files
     file_sections = []
-    for rel_path in project_info.context_files[:6]:
+    for rel_path in project_info.context_files[:4]:        # max 4 files
         abs_path = project_info.root / rel_path
         if abs_path.is_file():
-            content = _read_file_snippet(abs_path)
+            content = _read_file_snippet(abs_path, max_chars=800)   # 800 not 1500
             if content:
                 file_sections.append(f"### {rel_path}\n```\n{content}\n```")
     if file_sections:
