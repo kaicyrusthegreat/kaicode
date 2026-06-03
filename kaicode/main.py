@@ -12,7 +12,7 @@ import click
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.formatted_text import HTML, FormattedText
 from prompt_toolkit.styles import Style as PTStyle
 from rich.console import Console
 from rich.panel import Panel
@@ -40,31 +40,31 @@ from kaicode.session import Session, SESSIONS_DIR
 HISTORY_FILE = Path.home() / ".kaicode" / "history"
 
 PT_STYLE = PTStyle.from_dict({
-    "prompt":         "ansiblue bold",   # terminal's own blue — adapts to dark/light
+    "prompt":         "bold",
     "":               "default",
-    "bottom-toolbar": "noreverse",       # no forced background — inherits terminal bg
+    "bottom-toolbar": "noreverse",
 })
 
 
 def _make_toolbar(app):
-    """Return a prompt_toolkit bottom toolbar that looks like a full-width rule."""
+    """Two-line bottom toolbar: separator then info row with left/right content."""
     def _toolbar():
-        tok  = f"~{app.tokens_used:,} tok" if app.tokens_used else "0 tok"
-        msgs = len(app.session.messages)
-        info = (
-            f" {tok}  ·  {app.provider_name} / {app.model}"
-            f"  ·  {msgs} msg{'s' if msgs != 1 else ''}"
-            f"  ·  ⏵⏵ accept edits  (shift+tab to cycle) "
-        )
-        width  = shutil.get_terminal_size((80, 20)).columns
-        pad    = max(0, width - len(info))
-        left   = "─" * (pad // 2)
-        right  = "─" * (pad - pad // 2)
-        return HTML(
-            f'<style fg="#888888">{left}</style>'
-            f'<style fg="#888888">{info}</style>'
-            f'<style fg="#888888">{right}</style>'
-        )
+        width = shutil.get_terminal_size((80, 20)).columns
+        sep   = "─" * width
+
+        left  = " ⏵⏵ accept edits on  (shift+tab to cycle)  ·  ← for agents"
+        tok   = f"~{app.tokens_used:,} tok" if app.tokens_used else "0 tok"
+        right = f"{app.provider_name} / {app.model}  ·  {tok}  "
+        gap   = " " * max(1, width - len(left) - len(right))
+
+        return FormattedText([
+            ("fg:#3a3a3a",  sep),
+            ("",            "\n"),
+            ("fg:#6a1b9a bold", " ⏵⏵ accept edits on"),
+            ("fg:#666666",  "  (shift+tab to cycle)  ·  ← for agents"),
+            ("fg:#444444",  gap),
+            ("fg:#666666",  right),
+        ])
     return _toolbar
 
 
@@ -88,7 +88,7 @@ async def run_interactive(app) -> None:
 
     while True:
         try:
-            console.rule(style="kaicode.separator")
+            console.rule(style="dim #3a3a3a")
             user_input = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: ps.prompt("› ", style=PT_STYLE),
