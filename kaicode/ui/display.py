@@ -355,6 +355,7 @@ def print_help() -> None:
         ("Context & Code", ""),
         ("/diff",            "Show the last applied diff"),
         ("/context",         "Show auto-detected context files"),
+        ("/memory",          "Show project memory (use /memory clear to reset)"),
         ("Conversation", ""),
         ("/clear",           "Clear conversation history"),
         ("/status",          "Show tokens, model, and provider"),

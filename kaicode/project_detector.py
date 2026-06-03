@@ -6,6 +6,8 @@ import subprocess
 from pathlib import Path
 from typing import NamedTuple
 
+from kaicode.tools.memory_tools import read_memory
+
 
 class ProjectInfo(NamedTuple):
     project_type: str
@@ -149,6 +151,11 @@ def build_system_prompt(project_info: ProjectInfo, extra: str = "") -> str:
     if git_ctx:
         sections.append(f"## Git context\n{git_ctx}")
 
+    # Inject persistent memory from previous sessions
+    memory = read_memory(str(project_info.root))
+    if memory.strip():
+        sections.append(f"## Your memory from previous sessions\n{memory.strip()}")
+
     sections.append("""## Your tools
 - read_file — read any file
 - edit_file — edit a file by replacing text
@@ -158,6 +165,7 @@ def build_system_prompt(project_info: ProjectInfo, extra: str = "") -> str:
 - search_files — search for patterns in files
 - run_command — run any shell command
 - git_status / git_commit — git operations
+- update_memory — save notes that persist across sessions (architecture, conventions, preferences)
 
 ## Rules
 1. When the user asks you to DO something — call the appropriate tool immediately. Do NOT say you cannot do it.

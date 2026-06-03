@@ -8,6 +8,7 @@ from typing import Any, Callable
 from kaicode.tools.file_tools import read_file, edit_file, create_file, create_directory, list_files, run_command
 from kaicode.tools.search_tools import search_files
 from kaicode.tools.git_tools import git_status, git_commit, git_diff
+from kaicode.tools.memory_tools import update_memory
 
 
 TOOL_DEFINITIONS = [
@@ -153,6 +154,28 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_memory",
+            "description": (
+                "Save persistent notes about this project that will be available in future sessions. "
+                "Use this to remember: architecture decisions, coding conventions, important file locations, "
+                "user preferences, ongoing tasks, or anything useful to recall later. "
+                "The content you provide REPLACES the entire memory, so always include everything you want to keep."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": "Full markdown content to store as project memory. Include all notes you want to persist.",
+                    },
+                },
+                "required": ["content"],
+            },
+        },
+    },
 ]
 
 
@@ -171,7 +194,8 @@ class ToolRegistry:
             "run_command": lambda **kw: run_command(**{"cwd": self.cwd, **kw}),
             "git_status": lambda **kw: git_status(**{"path": self.cwd, **kw}),
             "git_commit": lambda **kw: git_commit(**{"path": self.cwd, **kw}),
-            "git_diff": lambda **kw: git_diff(**{"path": self.cwd, **kw}),
+            "git_diff":      lambda **kw: git_diff(**{"path": self.cwd, **kw}),
+            "update_memory": lambda **kw: update_memory(**{"project_root": self.cwd, **kw}),
         }
 
     def call(self, name: str, arguments: dict[str, Any]) -> str:

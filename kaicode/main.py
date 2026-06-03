@@ -210,6 +210,22 @@ async def handle_command(cmd: str, app) -> None:
         print_info(f"Messages in history: {len(app.session.messages)}")
         console.print()
 
+    elif command == "/memory":
+        from kaicode.tools.memory_tools import read_memory, clear_memory
+        if args == "clear":
+            clear_memory(app.cwd)
+            print_success("Project memory cleared.")
+        else:
+            mem = read_memory(app.cwd)
+            if mem.strip():
+                from rich.markdown import Markdown
+                console.print()
+                console.print(Markdown(mem))
+                console.print()
+            else:
+                print_info("No memory saved for this project yet.")
+                print_info("The model will save notes automatically using update_memory.")
+
     elif command == "/context":
         if app.project_info.context_files:
             print_info("Auto-detected context files:")
