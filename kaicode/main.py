@@ -88,11 +88,13 @@ async def run_interactive(app) -> None:
 
     while True:
         try:
-            console.rule(style="dim #3a3a3a")
             user_input = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: ps.prompt("› ", style=PT_STYLE),
             )
+            # Erase the "› hi" echo line — message will appear only in its bubble
+            sys.stdout.write('\x1b[1A\x1b[2K\r')
+            sys.stdout.flush()
         except (KeyboardInterrupt, EOFError):
             console.print()
             print_info("Goodbye!")
