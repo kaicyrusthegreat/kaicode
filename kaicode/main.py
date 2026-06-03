@@ -63,7 +63,7 @@ def _make_toolbar(app):
             ("fg:#555555",      "  ◈  "),
             ("fg:#00838f",      f"{app.provider_name}"),
             ("fg:#444444",      " / "),
-            ("fg:#e65100bold",  f"{app.model}"),
+            ("fg:#e65100 bold", f"{app.model}"),
             ("fg:#555555",      f"  ·  {tok}  ·  "),
             ("fg:#555555",      "by Kai Cyrus"),
             ("",                "\n"),
