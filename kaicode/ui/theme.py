@@ -3,7 +3,7 @@
 from rich.theme import Theme
 
 
-KAICODE_VERSION = "1.2.0"
+KAICODE_VERSION = "1.2.1"
 
 # Dual-mode palette — mid-saturation colors readable on dark AND light terminals
 KAICODE_THEME = Theme({
