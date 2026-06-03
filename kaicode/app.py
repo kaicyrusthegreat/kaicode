@@ -277,6 +277,15 @@ class KaiApp:
                     rdata = json.loads(result)
                     if "diff" in rdata:
                         self.last_diff = rdata["diff"]
+                    if rdata.get("success"):
+                        verify_err = self._verify_file(tool_args.get("path", ""))
+                        if verify_err:
+                            print_error(f"Syntax check failed — feeding error back to model")
+                            console.print(Text(f"  {verify_err}", style="kaicode.error"))
+                            result = json.dumps({**rdata, "syntax_error": verify_err,
+                                "note": "The edit was saved but has a syntax error. Please fix it."})
+                        else:
+                            print_success("Syntax OK")
                 except json.JSONDecodeError:
                     pass
 
@@ -294,6 +303,33 @@ class KaiApp:
                 content=result,
                 tool_results=[{"tool_use_id": tool_id, "content": result}],
             ))
+
+    def _verify_file(self, path: str) -> str | None:
+        """Run a quick syntax/compile check after editing a file. Returns error or None."""
+        import subprocess, sys
+        ext = Path(path).suffix.lower()
+        checks: dict[str, list[str]] = {
+            ".py":   [sys.executable, "-m", "py_compile", path],
+            ".js":   ["node", "--check", path],
+            ".ts":   ["node", "--check", path],
+            ".dart": ["dart", "analyze", "--fatal-infos", path],
+            ".go":   ["go", "vet", path],
+            ".rb":   ["ruby", "-c", path],
+            ".sh":   ["bash", "-n", path],
+        }
+        cmd = checks.get(ext)
+        if not cmd:
+            return None
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=15, cwd=self.cwd)
+            if r.returncode != 0:
+                err = (r.stderr or r.stdout).strip()
+                return err[:600] if err else f"Syntax check failed (exit {r.returncode})"
+        except FileNotFoundError:
+            pass  # checker not installed — skip silently
+        except Exception:
+            pass
+        return None
 
     async def _request_permission(
         self, tool_name: str, tool_args: dict, reason: str = ""
