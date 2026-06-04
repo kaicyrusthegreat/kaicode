@@ -29,6 +29,17 @@ def get_provider(name: str, config) -> BaseProvider:
         "groq": GroqProvider,
         "openai_compat": OpenAICompatProvider,
     }
+
+    if name == "cyrusai":
+        try:
+            from kaicode.providers.cyrusai import CyrusAIProvider
+            providers["cyrusai"] = CyrusAIProvider
+        except ImportError:
+            raise ImportError(
+                "The 'cyrusai' package is required for the CyrusAI provider. "
+                "Install it with: pip install cyrusai"
+            )
+
     if name not in providers:
         raise ValueError(f"Unknown provider: {name}. Available: {', '.join(providers)}")
     provider_config = config.get_provider(name)
