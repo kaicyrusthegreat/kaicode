@@ -6,7 +6,11 @@ import asyncio
 import json
 import os
 import re
+import select
+import sys
+import termios
 import time
+import tty
 import uuid
 from pathlib import Path
 from typing import Any
@@ -305,6 +309,64 @@ def _is_transient(err: str) -> bool:
 MAX_RETRIES = 2
 
 
+# ── ESC-to-cancel helper ──────────────────────────────────────────────────────
+
+class _CancelFlag:
+    """Thread-safe ESC-to-cancel during streaming.
+
+    The listener puts the shared TTY into raw mode, which disables ONLCR
+    (newline → CRLF translation) on OUTPUT too. So cooked mode MUST be
+    restored before anything is printed, or Rich panels render as a
+    right-shifted 'staircase' ghost. stop() therefore joins the thread and
+    restores the terminal synchronously before returning.
+    """
+    def __init__(self):
+        self.cancelled = False
+        self._thread = None
+        self._fd = None
+        self._old = None
+
+    def start_listening(self):
+        import threading
+        self.cancelled = False
+        try:
+            self._fd = sys.stdin.fileno()
+            self._old = termios.tcgetattr(self._fd)
+        except Exception:
+            self._fd = None
+            self._old = None
+            return  # not a real terminal — ESC-cancel simply disabled
+        self._thread = threading.Thread(target=self._listen, daemon=True)
+        self._thread.start()
+
+    def _listen(self):
+        try:
+            tty.setraw(self._fd)
+            while not self.cancelled:
+                if select.select([sys.stdin], [], [], 0.1)[0]:
+                    if sys.stdin.read(1) == '\x1b':  # ESC
+                        self.cancelled = True
+                        break
+        except Exception:
+            pass
+        finally:
+            self._restore()
+
+    def _restore(self):
+        if self._fd is not None and self._old is not None:
+            try:
+                termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old)
+            except Exception:
+                pass
+
+    def stop(self):
+        self.cancelled = True
+        t, self._thread = self._thread, None
+        if t is not None:
+            t.join(timeout=0.3)      # wait for the listener to leave raw mode
+        self._restore()              # guarantee cooked mode before any printing
+
+
 # ── Permission helpers ────────────────────────────────────────────────────────
 
 _AUTO_APPROVE_TOOLS = {
@@ -487,6 +549,8 @@ class KaiApp:
         # Cache system prompt once — don't rebuild on every tool iteration
         system_prompt = self._system_prompt()
 
+        cancel = _CancelFlag()
+
         for iteration in range(MAX_TOOL_ITERATIONS):
             assistant_content = ""
             pending_tool_calls: list[dict] = []
@@ -494,6 +558,10 @@ class KaiApp:
             label = "Working" if iteration > 0 else ""
             live = Live(_StreamStatus(label), console=console, transient=True, refresh_per_second=10)
             live.start()
+
+            # ESC listener is active ONLY while streaming (raw mode would
+            # otherwise corrupt panel rendering during printing).
+            cancel.start_listening()
 
             # Select relevant tools (not all tools every time)
             active_tools = (
@@ -519,10 +587,21 @@ class KaiApp:
                         tools=active_tools,
                     )
                     async for chunk in stream:
+                        # ── Check ESC cancel ─────────────────────────────
+                        if cancel.cancelled:
+                            live.stop()
+                            cancel.stop()
+                            if assistant_content.strip():
+                                print_kai_message(assistant_content.strip() + "\n\n⚡ *cancelled*")
+                                self.session.messages.append(
+                                    Message(role="assistant", content=assistant_content))
+                            else:
+                                print_info("Cancelled.")
+                            return
                         if chunk.content:
                             assistant_content += chunk.content
                         if chunk.tool_call:
-                            pending_tool_calls.append(chunk.tool_call)   # collect ALL, not just last
+                            pending_tool_calls.append(chunk.tool_call)
                         if chunk.usage:
                             usage = chunk.usage
                         if chunk.done:
@@ -565,6 +644,7 @@ class KaiApp:
                     return
 
             live.stop()
+            cancel.stop()   # leave raw mode BEFORE any panel/printing this turn
             if not stream_ok:
                 return
 
@@ -602,6 +682,7 @@ class KaiApp:
 
             # ── No tools requested: plain response, end the turn ────────────
             if not pending_tool_calls:
+                cancel.stop()
                 if assistant_content:
                     print_kai_message(assistant_content)
                     self.session.messages.append(Message(role="assistant", content=assistant_content))
