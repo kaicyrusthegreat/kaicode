@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import shutil
 import sys
 import time
 from pathlib import Path
@@ -14,6 +13,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.formatted_text import HTML, FormattedText
 from prompt_toolkit.styles import Style as PTStyle
+from prompt_toolkit.completion import Completer, Completion
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -39,39 +39,76 @@ from kaicode.session import Session, SESSIONS_DIR
 HISTORY_FILE = Path.home() / ".kaicode" / "history"
 
 PT_STYLE = PTStyle.from_dict({
-    "prompt":         "fg:#50fa7b bold bg:#1a4a1a",
-    "":               "bg:#1a4a1a fg:#e8f5e9",
-    "bottom-toolbar": "bg:default fg:default noreverse",
+    "prompt":         "fg:#50fa7b bold",
+    "":               "fg:#e8f5e9",
+    "bottom-toolbar": "noreverse",
+    "completion-menu":                "bg:#1e1e2e fg:#cdd6f4",
+    "completion-menu.completion":     "bg:#1e1e2e fg:#cdd6f4",
+    "completion-menu.completion.current": "bg:#45475a fg:#50fa7b bold",
+    "completion-menu.meta":           "fg:#6c7086 italic",
+    "completion-menu.meta.current":   "fg:#a6e3a1 italic",
 })
 
 
-def _make_toolbar(app):
-    """Three-row toolbar: status · separator · hints."""
-    def _toolbar():
-        width = shutil.get_terminal_size((80, 20)).columns
-        sep   = "─" * width
-        tok   = f"~{app.tokens_used:,} tok" if app.tokens_used else "0 tok"
+# ── Slash command completer ───────────────────────────────────────────────────
 
+_SLASH_COMMANDS = [
+    ("/model",    "Switch model — shows picker if no name given"),
+    ("/provider", "Switch provider (ollama/openai/openai/groq)"),
+    ("/save",     "Save current conversation"),
+    ("/load",     "Load a saved conversation"),
+    ("/sessions", "List all saved sessions"),
+    ("/diff",     "Show the last applied diff"),
+    ("/context",  "Show auto-detected context files"),
+    ("/memory",   "Show project memory (/memory clear to reset)"),
+    ("/clear",    "Clear conversation history"),
+    ("/status",   "Show tokens, model, and provider"),
+    ("/help",     "Show all commands"),
+    ("/quit",     "Exit KaiCode"),
+]
+
+
+class SlashCompleter(Completer):
+    """Show slash commands when the user types '/'."""
+
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor.lstrip()
+        if not text.startswith("/"):
+            return
+        for cmd, desc in _SLASH_COMMANDS:
+            if cmd.startswith(text):
+                yield Completion(
+                    cmd,
+                    start_position=-len(text),
+                    display=cmd,
+                    display_meta=desc,
+                )
+
+
+def _make_toolbar(app):
+    """Two-line footer pinned to the bottom: status row + hints row.
+
+    Kept to plain text lines (no separators / backgrounds / manual cursor
+    tricks) so prompt_toolkit manages the geometry cleanly without ghosting.
+    """
+    def _toolbar():
+        tok  = f"~{app.tokens_used:,} tok" if app.tokens_used else "0 tok"
+        msgs = len(app.session.messages)
         return FormattedText([
-            # Row 1: blank green bottom padding (mirrors top padding in prompt)
-            ("bg:#1a4a1a",      " " * width),
-            ("",                "\n"),
-            # Row 2: bottom line of input box
-            ("fg:#3a3a3a",      sep),
-            ("",                "\n"),
-            # Row 2: status info
+            # Row 1 — live status
             ("fg:#555555",      "  ◈  "),
             ("fg:#00838f",      f"{app.provider_name}"),
             ("fg:#444444",      " / "),
             ("fg:#e65100 bold", f"{app.model}"),
-            ("fg:#555555",      f"  ·  {tok}  ·  by Kai Cyrus"),
+            ("fg:#555555",      f"  ·  {tok}  ·  {msgs} msgs  ·  by Kai Cyrus"),
             ("",                "\n"),
-            # Row 3: separator before hints
-            ("fg:#3a3a3a",      sep),
-            ("",                "\n"),
-            # Row 4: hints
-            ("fg:#2196f3 bold", " ⏵⏵ accept edits on"),
-            ("fg:#666666",      "  (shift+tab to cycle)  ·  ← for agents"),
+            # Row 2 — hints
+            ("fg:#666666",      "  ESC"),
+            ("fg:#555555",      " cancel  ·  "),
+            ("fg:#666666",      "/"),
+            ("fg:#555555",      " commands  ·  "),
+            ("fg:#666666",      "Ctrl+C"),
+            ("fg:#555555",      " quit"),
         ])
     return _toolbar
 
@@ -82,6 +119,7 @@ async def run_interactive(app) -> None:
     ps = PromptSession(
         history=FileHistory(str(HISTORY_FILE)),
         auto_suggest=AutoSuggestFromHistory(),
+        completer=SlashCompleter(),
         style=PT_STYLE,
         mouse_support=False,
         bottom_toolbar=_make_toolbar(app),
@@ -89,24 +127,21 @@ async def run_interactive(app) -> None:
 
     print_splash()
     app.print_header()
-    print_info(f"Provider: {app.provider_name}  ·  Model: {app.model}")
-    print_info(f"Project: {app.project_info.description}")
-    print_info("Type /help for commands, /quit to exit.")
+    print_info(
+        f"Provider: {app.provider_name}  ·  Model: {app.model}  ·  "
+        f"Project: {app.project_info.description}  ·  /help for commands, /quit to exit"
+    )
     console.print()
 
     while True:
         try:
-            console.rule(style="dim #3a3a3a")   # top line of input area
-            prompt_fmt = FormattedText([
-                ("bg:#1a4a1a",               "\n"),   # blank top padding (green)
-                ("fg:#50fa7b bold bg:#1a4a1a", "  › "),
-            ])
+            prompt_fmt = FormattedText([("fg:#50fa7b bold", "›  ")])
             user_input = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: ps.prompt(prompt_fmt, style=PT_STYLE),
             )
-            # Erase blank padding line + prompt echo (2 lines)
-            sys.stdout.write('\x1b[2A\x1b[2K\r\x1b[1B\x1b[2K\r\x1b[1A')
+            # Erase the echoed prompt line so the message shows only in its bubble
+            sys.stdout.write("\x1b[1A\x1b[2K\r")
             sys.stdout.flush()
         except (KeyboardInterrupt, EOFError):
             console.print()
