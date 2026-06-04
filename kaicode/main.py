@@ -127,9 +127,11 @@ async def run_interactive(app) -> None:
 
     print_splash()
     app.print_header()
-    print_info(
-        f"Provider: {app.provider_name}  ·  Model: {app.model}  ·  "
-        f"Project: {app.project_info.description}  ·  /help for commands, /quit to exit"
+    console.print(
+        f"·  Provider: {app.provider_name}  ·  Model: {app.model}  ·  "
+        f"Project: {app.project_info.description}  ·  /help for commands, /quit to exit",
+        style="kaicode.info",
+        justify="center",
     )
     console.print()
 
