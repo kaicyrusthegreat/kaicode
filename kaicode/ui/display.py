@@ -36,6 +36,8 @@ _TOOL_ICONS = {
 }
 
 _MODEL_LABELS = {
+    # CyrusAI (self-improving — learns from every turn)
+    "cyrusai":                    "Self-improving core — recalls past lessons, learns from each turn (experimental)",
     # OpenAI
     "model-opus-4-8":            "Best for complex reasoning, architecture planning, and large codebases",
     "model-sonnet-4-6":          "Best for everyday coding — smart, fast, well-balanced",

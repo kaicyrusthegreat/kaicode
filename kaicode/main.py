@@ -162,7 +162,7 @@ async def handle_command(cmd: str, app) -> None:
             except ValueError as e:
                 print_error(str(e))
         else:
-            print_info("Available providers: ollama, openai, openai, groq, openai_compat")
+            print_info("Available providers: ollama, openai, openai, groq, openai_compat, cyrusai")
             print_info(f"Current: {app.provider_name}")
             print_info("Use: /provider <name> [model]")
 
