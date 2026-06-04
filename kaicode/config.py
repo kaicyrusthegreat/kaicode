@@ -137,7 +137,7 @@ def create_default_config() -> None:
             "providers": {
                 "ollama": {
                     "base_url": "http://localhost:11434",
-                    "default_model": "llama3.2",
+                    "default_model": "qwen3:8b",
                 },
                 "openai": {
                     "api_key": "",

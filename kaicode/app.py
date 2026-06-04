@@ -7,6 +7,7 @@ import json
 import os
 import re
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +35,7 @@ from kaicode.ui.display import (
 )
 
 
-MAX_TOOL_ITERATIONS = 10
+MAX_TOOL_ITERATIONS = 25
 MAX_HISTORY_MESSAGES = 50   # trim older messages beyond this
 
 # ── Tool selection ────────────────────────────────────────────────────────────
@@ -66,6 +67,14 @@ def _select_tools(message: str) -> list[dict]:
     if any(w in lower for w in ("http://", "https://", "url", "fetch the", "fetch this",
                                 "documentation", "api reference", "look up online", "from the web")):
         names.add("web_fetch")
+    if any(w in lower for w in ("search the web", "search online", "google", "find online",
+                                "search for info", "look up online", "what is the latest")):
+        names.add("web_search")
+    if any(w in lower for w in ("type text", "type this", "click on", "click at", "mouse click",
+                                "press key", "press enter", "press cmd", "press ctrl",
+                                "screenshot", "screen capture", "take a screenshot",
+                                "keyboard automation", "mouse automation")):
+        names |= {"type_text", "key_press", "mouse_click", "screenshot"}
     return [t for t in TOOL_DEFINITIONS if t["function"]["name"] in names]
 
 
@@ -97,7 +106,9 @@ _HAS_TASK = re.compile(
     r'file|folder|dir(?:ectory)?|create|make|edit|update|fix|refactor|'
     r'read|write|delete|remove|rename|move|copy|'
     r'run|execute|install|build|compile|test|commit|push|'
-    r'search|find|grep|implement|add|generate|scaffold'
+    r'search|find|grep|implement|add|generate|scaffold|'
+    r'debug|open|script|code|program|function|class|module|'
+    r'fetch|download|deploy|click|type|screenshot'
     r')\b',
     re.I,
 )
@@ -240,7 +251,7 @@ def _extract_text_tool_calls(content: str, valid_names: set[str]) -> tuple[str, 
                 if not isinstance(args, dict):
                     args = {}
                 calls.append({
-                    "id": f"text_{len(calls)}_{abs(hash(name)) % 100000}",
+                    "id": f"text_{uuid.uuid4().hex[:8]}",
                     "name": name,
                     "input": args,
                 })
@@ -284,6 +295,7 @@ _TRANSIENT_MARKERS = (
     "429", "500", "502", "503", "504",
     "timeout", "timed out", "connect", "overloaded",
     "temporarily", "rate limit", "read error", "remote protocol",
+    "model output error", "both be empty",  # Ollama sometimes returns empty output
 )
 
 def _is_transient(err: str) -> bool:
@@ -300,6 +312,7 @@ _AUTO_APPROVE_TOOLS = {
     "git_status", "git_diff",
     "grep_ast",      # read-only symbol search
     "web_fetch",     # read-only URL fetch
+    "web_search",    # read-only web search
     "update_memory", # user's own persistent notes
     "repo_map",      # read-only codebase index
 }
@@ -311,6 +324,10 @@ _TOOL_ACTION_LABELS = {
     "run_command":      "Run command",
     "git_commit":       "Git commit",
     "run_tests":        "Run test suite",
+    "type_text":        "Type text (keyboard)",
+    "key_press":        "Press keys",
+    "mouse_click":      "Mouse click",
+    "screenshot":       "Take screenshot",
 }
 
 def _format_permission_detail(tool_name: str, args: dict) -> str:
@@ -368,11 +385,12 @@ class KaiApp:
 
     def _default_model(self) -> str:
         defaults = {
-            "ollama": "llama3.2",
+            "ollama": "qwen3:8b",
             "openai": "model-sonnet-4-6",
             "openai": "gpt-4o",
             "groq": "llama-3.1-70b-versatile",
             "openai_compat": "default",
+            "cyrusai": "cyrusai",
         }
         return defaults.get(self.provider_name, "default")
 
@@ -380,7 +398,7 @@ class KaiApp:
         print_header(self.model, self.provider_name, self.cwd)
 
     def _system_prompt(self) -> str:
-        return build_system_prompt(self.project_info, self.config.system_prompt)
+        return build_system_prompt(self.project_info, self.config.system_prompt, model=self.model)
 
     def _trim_messages(self, messages: list[Message]) -> list[Message]:
         """Keep history within MAX_HISTORY_MESSAGES, never split mid-tool-call."""
@@ -477,21 +495,7 @@ class KaiApp:
             live = Live(_StreamStatus(label), console=console, transient=True, refresh_per_second=10)
             live.start()
 
-            if self._tools_disabled and iteration == 0 and _needs_tools(user_input):
-                live.stop()
-                console.print(Panel(
-                    Text.assemble(
-                        ("  ⚠  ", "kaicode.warning"),
-                        (f"'{self.model}' doesn't support tools.\n\n", "default"),
-                        ("  Switch with ", "kaicode.muted"),
-                        ("/model", "bold kaicode.assistant"),
-                        (" and try again.\n", "kaicode.muted"),
-                    ),
-                    border_style="kaicode.warning", padding=(0, 1),
-                ))
-                return
-
-            # Select relevant tools (not all 13 every time)
+            # Select relevant tools (not all tools every time)
             active_tools = (
                 None if self._tools_disabled
                 else _select_tools(user_input) if _needs_tools(user_input)
@@ -530,10 +534,12 @@ class KaiApp:
                     err = str(e)
                     if "does not support tools" in err.lower():
                         self._tools_disabled = True
-                        print_info(f"'{self.model}' doesn't support tools — text-only mode.")
-                        self.session.messages.pop()
-                        await self.chat(user_input)
-                        return
+                        print_info(f"'{self.model}' doesn't support native tools — using text-based tool calls.")
+                        # Don't return — just retry this iteration without native tools
+                        active_tools = None
+                        live = Live(_StreamStatus(label), console=console, transient=True, refresh_per_second=10)
+                        live.start()
+                        continue
                     if "ollama error 404" in err.lower() and self.provider_name == "ollama":
                         available = await self.provider.list_models()
                         if available:
@@ -567,10 +573,21 @@ class KaiApp:
                 self._tokens_used += tokens
                 self.session.add_tokens(tokens)
 
+            # ── Strip <think> tags from reasoning models ──────────────────
+            if assistant_content:
+                assistant_content = re.sub(
+                    r'<think>.*?</think>\s*', '', assistant_content, flags=re.DOTALL
+                ).strip()
+
             # ── Fallback: model emitted tool calls as JSON text, not natively ─
             # Always scan: a model may mix one native call with extra text calls.
-            if active_tools and assistant_content:
-                valid = {t["function"]["name"] for t in active_tools}
+            # For models without native tool support, this is the PRIMARY mechanism.
+            if assistant_content and (active_tools or self._tools_disabled):
+                if active_tools:
+                    valid = {t["function"]["name"] for t in active_tools}
+                else:
+                    # Tools-disabled mode: accept any known tool name
+                    valid = {t["function"]["name"] for t in TOOL_DEFINITIONS}
                 cleaned, text_calls = _extract_text_tool_calls(assistant_content, valid)
                 if text_calls:
                     assistant_content = cleaned

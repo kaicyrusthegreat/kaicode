@@ -126,7 +126,29 @@ def _git_context(root: Path) -> str:
     return "\n".join(lines)
 
 
-def build_system_prompt(project_info: ProjectInfo, extra: str = "") -> str:
+def _git_context_slim(root: Path) -> str:
+    """Minimal git context — just branch + last 4 commits, no diff."""
+    lines = []
+    try:
+        branch = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=root, capture_output=True, text=True, timeout=2,
+        )
+        if branch.returncode == 0:
+            lines.append(f"Branch: {branch.stdout.strip()}")
+
+        log = subprocess.run(
+            ["git", "log", "--oneline", "-4"],
+            cwd=root, capture_output=True, text=True, timeout=2,
+        )
+        if log.returncode == 0 and log.stdout.strip():
+            lines.append(log.stdout.strip())
+    except Exception:
+        pass
+    return "\n".join(lines)
+
+
+def build_system_prompt(project_info: ProjectInfo, extra: str = "", model: str = "") -> str:
     sections: list[str] = []
 
     sections.append(
@@ -135,63 +157,62 @@ def build_system_prompt(project_info: ProjectInfo, extra: str = "") -> str:
         f"Working directory: {project_info.root}"
     )
 
-    # Inject actual file contents for key project files
-    file_sections = []
-    for rel_path in project_info.context_files[:4]:        # max 4 files
-        abs_path = project_info.root / rel_path
-        if abs_path.is_file():
-            content = _read_file_snippet(abs_path, max_chars=800)   # 800 not 1500
-            if content:
-                file_sections.append(f"### {rel_path}\n```\n{content}\n```")
-    if file_sections:
-        sections.append("## Project files\n" + "\n\n".join(file_sections))
+    # Inject key project file names (NOT full contents — use read_file when needed)
+    if project_info.context_files:
+        file_list = ", ".join(project_info.context_files[:3])
+        sections.append(f"Key files: {file_list}")
 
-    # Inject git context
-    git_ctx = _git_context(project_info.root)
+    # Inject git context (minimal — just branch + last 4 commits)
+    git_ctx = _git_context_slim(project_info.root)
     if git_ctx:
-        sections.append(f"## Git context\n{git_ctx}")
+        sections.append(f"## Git\n{git_ctx}")
 
-    # Inject persistent memory from previous sessions
+    # Inject persistent memory from previous sessions (capped)
     memory = read_memory(str(project_info.root))
     if memory.strip():
-        sections.append(f"## Your memory from previous sessions\n{memory.strip()}")
+        mem = memory.strip()[:500]
+        sections.append(f"## Memory\n{mem}")
 
-    sections.append("""## Your tools
-- read_file — read any file
-- edit_file — edit a file by replacing text
-- create_file — create a new file with content
-- create_directory — create a folder/directory at any path
-- list_files — list files in a directory
-- search_files — search for patterns in files
-- run_command — run any shell command
-- git_status / git_commit — git operations
-- grep_ast — find function/class definitions by name (smarter than text search)
-- repo_map — compact map of the whole codebase (files + their classes/functions)
-- web_fetch — fetch a URL for docs or API references
-- run_tests — run the project's test suite (auto-detected)
-- update_memory — save notes that persist across sessions
+    sections.append("""## Rules
+1. COMPLETE THE WHOLE TASK using tools. Never ask "shall I continue?" — just do it.
+2. create_file: put COMPLETE content in ONE call. Never create empty then edit.
+3. Always read_file before edit_file. Match old_content exactly.
+4. After writing code, run it or run_tests to verify. Fix failures automatically.
+5. Keep prose minimal. End with a one-line summary.
+6. For greetings (hi, hello, hey) — reply with SHORT text, NO tools.
+7. NEVER use type_text/key_press/mouse_click/screenshot unless user explicitly asks for automation.
+8. Use update_memory for important notes across sessions.""")
 
-## How to call tools
-Use the native tool-calling mechanism. Do NOT print tool calls as JSON text
-in your reply — actually invoke the tool. Emit the tool call and stop; the
-result will be given back to you, then continue.
-
-## Rules
-1. COMPLETE THE WHOLE TASK. Keep using tools until it is fully done. Never stop
-   to ask "would you like me to…" or "shall I continue?" — just do it.
-2. When creating a file, put the COMPLETE final content in the create_file call
-   in ONE step. Never create an empty file and then edit it.
-3. When the user asks you to DO something, use the tool. Never say you cannot.
-4. Outline a short numbered plan ONLY for genuinely multi-file or multi-step
-   work. For a single file or single command, just do it — no preamble.
-5. Always read a file before editing it. Match old_content exactly.
-6. After writing code, run it or run_tests to verify it works, then fix failures.
-7. You CAN create files and directories anywhere on the filesystem.
-8. Keep prose minimal. Let tool output speak. End with a one-line summary only.
-9. For greetings and pure concept questions — respond directly without tools.
-10. Use update_memory to save anything worth remembering across sessions.""")
+    # Per-model tuning hints
+    model_lower = model.lower()
+    if "qwen3" in model_lower:
+        sections.append(
+            "## Model-specific note\n"
+            "You are a Qwen3 model. Use /no_think when the task is simple and "
+            "does not require deep reasoning. Always use the native tool-calling "
+            "mechanism — never output JSON tool calls as plain text."
+        )
+    elif "phi4" in model_lower:
+        sections.append(
+            "## Model-specific note\n"
+            "You are Phi-4. Think step-by-step before using tools. "
+            "Use the native tool-calling mechanism for all tool invocations."
+        )
+    elif "gemma" in model_lower:
+        sections.append(
+            "## Model-specific note\n"
+            "You are a Gemma model. Be concise and action-oriented. "
+            "Use the native tool-calling mechanism — never output tool calls as text."
+        )
+    elif "granite" in model_lower:
+        sections.append(
+            "## Model-specific note\n"
+            "You are IBM Granite. Focus on precision and correctness. "
+            "Use the native tool-calling mechanism for all tool invocations."
+        )
 
     if extra:
         sections.append(extra)
 
     return "\n\n".join(sections)
+

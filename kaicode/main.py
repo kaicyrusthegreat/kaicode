@@ -247,8 +247,37 @@ async def handle_command(cmd: str, app) -> None:
         print_error(f"Unknown command: {command}  —  type /help for available commands.")
 
 
+# Preferred order based on actual KaiCode test results (best first)
+_MODEL_RANK = [
+    "qwen3:8b",           # 🥇 Best overall — reasoning + tool-calling + verification
+    "qwen2.5-coder:7b",   # 🥈 Best for code — specialized, reliable tools
+    "qwen3:4b",           # 🥉 Best bang-for-buck — tiny but full tool support
+    "granite4:3b",        # Smallest model that works flawlessly
+    "gemma4:latest",      # Reliable, clean output
+    "gemma3:4b",          # Fast, compact Google model
+    "llama3.1:8b",        # Solid workhorse
+    "llama3.2:latest",    # Good for chat, weak on tools
+    "phi4:latest",        # Great reasoning, no native tools
+    "gpt-oss:20b",        # Large, slow, no native tools
+    "devstral:latest",    # Heavy — agentic coding
+    "qwen3-coder:latest", # Heavy — advanced coding
+    "deepseek-r1:8b",     # Heavy — step-by-step reasoning
+]
+
+
+def _rank_key(model_name: str) -> int:
+    """Return sort key: ranked models get their index, unknown ones go to end."""
+    try:
+        return _MODEL_RANK.index(model_name)
+    except ValueError:
+        return len(_MODEL_RANK)
+
+
 async def _pick_model(models: list[str], app) -> None:
     """Show a numbered model list with descriptions and let the user pick."""
+    # Sort models by test ranking (best first), unknowns at end alphabetically
+    models = sorted(models, key=lambda m: (_rank_key(m), m))
+
     lines = Text()
     for i, m in enumerate(models, 1):
         active     = m == app.model
@@ -302,7 +331,7 @@ async def _pick_model(models: list[str], app) -> None:
 @click.option("--model", "-m", default=None, help="Model name")
 @click.option("--session", "-s", default=None, help="Load a saved session")
 @click.option("--config", "-c", "config_path", default=None, help="Path to config file")
-@click.version_option(version="1.3.0", prog_name="kaicode")
+@click.version_option(version="2.0.2", prog_name="kaicode")
 @click.argument("prompt", nargs=-1)
 def main(provider, model, session, config_path, prompt):
     """KaiCode — Terminal AI coding assistant.\n\nSupports Ollama, OpenAI, OpenAI, Groq, and any OpenAI-compatible API."""
