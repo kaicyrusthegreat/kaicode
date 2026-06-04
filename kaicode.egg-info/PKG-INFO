@@ -1,7 +1,9 @@
 Metadata-Version: 2.4
 Name: kaicode
-Version: 0.1.0
+Version: 2.0.2
 Summary: A terminal AI coding assistant supporting multiple AI providers
+Home-page: https://github.com/kaicyrus/kaicode
+Author: Kai Cyrus
 Author-email: Kai Cyrus <me@kaicyrus.com>
 License: MIT
 Project-URL: Homepage, https://github.com/kaicyrus/kaicode
@@ -31,6 +33,8 @@ Requires-Dist: gitpython>=3.1.43
 Requires-Dist: prompt_toolkit>=3.0.47
 Requires-Dist: pygments>=2.18.0
 Requires-Dist: pathspec>=0.12.1
+Requires-Dist: pyautogui>=0.9.54
+Requires-Dist: beautifulsoup4>=4.12.0
 
 # KaiCode
 

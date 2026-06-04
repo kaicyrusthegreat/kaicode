@@ -9,3 +9,5 @@ gitpython>=3.1.43
 prompt_toolkit>=3.0.47
 pygments>=2.18.0
 pathspec>=0.12.1
+pyautogui>=0.9.54
+beautifulsoup4>=4.12.0

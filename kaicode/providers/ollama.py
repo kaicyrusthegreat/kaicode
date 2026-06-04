@@ -49,6 +49,7 @@ class OllamaProvider(BaseProvider):
             "model": model,
             "messages": msgs,
             "stream": True,
+            "keep_alive": "30m",       # keep model loaded 30 min (default 5m)
         }
         if tools:
             payload["tools"] = tools
@@ -69,6 +70,9 @@ class OllamaProvider(BaseProvider):
                         data = json.loads(line)
                     except json.JSONDecodeError:
                         continue
+                    # Ollama sends errors as {"error": "..."} — catch them
+                    if "error" in data:
+                        raise ProviderError(f"Ollama: {data['error']}")
                     msg = data.get("message", {})
                     content = msg.get("content", "")
                     done = data.get("done", False)

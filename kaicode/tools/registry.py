@@ -11,8 +11,10 @@ from kaicode.tools.git_tools import git_status, git_commit, git_diff
 from kaicode.tools.memory_tools import update_memory
 from kaicode.tools.ast_tools import grep_ast
 from kaicode.tools.web_tools import web_fetch
+from kaicode.tools.web_search_tools import web_search
 from kaicode.tools.test_tools import run_tests
 from kaicode.tools.repo_map_tools import repo_map
+from kaicode.tools.keyboard_mouse_tools import type_text, key_press, mouse_click, screenshot
 
 
 TOOL_DEFINITIONS = [
@@ -238,6 +240,81 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the web for information. Use when you need to find documentation, look up errors, or get current information from the internet. Returns titles, URLs, and snippets.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query":       {"type": "string",  "description": "Search query"},
+                    "max_results": {"type": "integer", "description": "Max results to return (default: 5)"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "type_text",
+            "description": "Type text using the keyboard. Use to enter text into applications, terminals, or text fields.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text":     {"type": "string", "description": "Text to type"},
+                    "interval": {"type": "number", "description": "Delay between keystrokes in seconds (default: 0.02)"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "key_press",
+            "description": "Press a key or key combination. Examples: 'enter', 'tab', 'cmd+c', 'ctrl+shift+t'. Use '+' to combine keys.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keys": {"type": "string", "description": "Key(s) to press. Use '+' for combos: 'cmd+c', 'ctrl+z', 'enter'"},
+                },
+                "required": ["keys"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mouse_click",
+            "description": "Click the mouse at screen coordinates. Use for GUI automation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x":      {"type": "integer", "description": "X screen coordinate"},
+                    "y":      {"type": "integer", "description": "Y screen coordinate"},
+                    "button": {"type": "string",  "description": "'left', 'right', or 'middle' (default: 'left')"},
+                    "clicks": {"type": "integer", "description": "Number of clicks, 2 for double-click (default: 1)"},
+                },
+                "required": ["x", "y"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "screenshot",
+            "description": "Take a screenshot of the entire screen and save it to a file.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "File path to save the screenshot (default: 'screenshot.png')"},
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 
@@ -260,8 +337,13 @@ class ToolRegistry:
             "update_memory": lambda **kw: update_memory(**{"project_root": self.cwd, **kw}),
             "grep_ast":      lambda **kw: grep_ast(**{"path": self.cwd, **kw}),
             "web_fetch":     web_fetch,
+            "web_search":    web_search,
             "run_tests":     lambda **kw: run_tests(**{"path": self.cwd, **kw}),
             "repo_map":      lambda **kw: repo_map(**{"path": self.cwd, **kw}),
+            "type_text":     type_text,
+            "key_press":     key_press,
+            "mouse_click":   mouse_click,
+            "screenshot":    screenshot,
         }
 
     # Common argument aliases models use that differ from our parameter names
