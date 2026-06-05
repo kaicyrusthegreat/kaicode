@@ -432,7 +432,14 @@ class KaiApp:
     def __init__(self, config: KaiConfig, provider_name: str | None = None, model: str | None = None) -> None:
         self.config = config
         self.provider_name = provider_name or config.default_provider
-        self.provider: BaseProvider = get_provider(self.provider_name, config)
+        try:
+            self.provider: BaseProvider = get_provider(self.provider_name, config)
+        except (ImportError, ValueError) as e:
+            # Default provider unavailable (e.g. 'cyrusai' package or Ollama not
+            # present) — fall back to ollama so kaicode still launches.
+            print_info(f"'{self.provider_name}' unavailable ({e}); falling back to ollama.")
+            self.provider_name = "ollama"
+            self.provider = get_provider("ollama", config)
         self.model = model or config.get_provider(self.provider_name).default_model or self._default_model()
         self.cwd = os.getcwd()
         self.session = Session(

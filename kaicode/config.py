@@ -26,7 +26,7 @@ class ProviderConfig:
 
 @dataclass
 class KaiConfig:
-    default_provider: str = "ollama"
+    default_provider: str = "cyrusai"
     providers: dict[str, ProviderConfig] = field(default_factory=dict)
     theme: str = "dark"
     auto_detect_project: bool = True
@@ -130,11 +130,16 @@ def create_default_config() -> None:
 
     if not GLOBAL_CONFIG_FILE.exists():
         default = {
-            "default_provider": "ollama",
+            "default_provider": "cyrusai",
             "theme": "dark",
             "auto_detect_project": True,
             "max_context_files": 10,
             "providers": {
+                "cyrusai": {
+                    "base_url": "http://localhost:11434",
+                    "default_model": "cyrusai",
+                    "student_model": "qwen3:4b",
+                },
                 "ollama": {
                     "base_url": "http://localhost:11434",
                     "default_model": "qwen3:8b",
