@@ -55,6 +55,10 @@ PT_STYLE = PTStyle.from_dict({
 _SLASH_COMMANDS = [
     ("/model",    "Switch model — shows picker if no name given"),
     ("/provider", "Switch provider (ollama/openai/openai/groq)"),
+    ("/init",     "Generate a KAICODE.md with project instructions"),
+    ("/undo",     "Revert the last file change the agent made"),
+    ("/redo",     "Re-apply the last undone change"),
+    ("/changes",  "List file changes made this session"),
     ("/save",     "Save current conversation"),
     ("/load",     "Load a saved conversation"),
     ("/sessions", "List all saved sessions"),
@@ -154,12 +158,84 @@ async def run_interactive(app) -> None:
         if not user_input:
             continue
 
+        # `!cmd` — run a shell command inline without leaving the REPL.
+        if user_input.startswith("!"):
+            run_shell(user_input[1:].strip())
+            continue
+
         if user_input.startswith("/"):
             await handle_command(user_input, app)
             continue
 
         print_user_message(user_input)
         await app.chat(user_input)
+
+
+def run_shell(command: str) -> None:
+    """Run a shell command inline (`!cmd`) and render its output."""
+    if not command:
+        return
+    import subprocess
+    from rich import box
+    try:
+        r = subprocess.run(command, shell=True, capture_output=True,
+                           text=True, timeout=120)
+    except subprocess.TimeoutExpired:
+        print_error(f"Command timed out: {command}")
+        return
+    except Exception as e:
+        print_error(str(e))
+        return
+    out = (r.stdout or "").rstrip()
+    err = (r.stderr or "").rstrip()
+    ok = r.returncode == 0
+    console.print(Panel(
+        Text(out or "(no output)"),
+        box=box.ROUNDED,
+        title=f"[kaicode.dir]$ {command[:70]}[/]  "
+              f"[{'kaicode.success' if ok else 'kaicode.error'}]rc={r.returncode}[/]",
+        border_style="kaicode.success" if ok else "kaicode.error",
+        padding=(0, 1),
+    ))
+    if err:
+        console.print(Text(err, style="kaicode.warning"))
+
+
+async def _init_project(app, overwrite: bool = False) -> None:
+    """Scaffold a KAICODE.md with detected project info + a codebase map."""
+    target = Path(app.cwd) / "KAICODE.md"
+    if target.exists() and not overwrite:
+        print_info("KAICODE.md already exists — use /init --force to overwrite.")
+        return
+    import json as _json
+    try:
+        rm = _json.loads(await asyncio.to_thread(app.tool_registry.call, "repo_map", {}))
+        repo_map = (rm.get("map", "") or "")[:2500]
+        file_count = rm.get("files", 0)
+    except Exception:
+        repo_map, file_count = "", 0
+
+    pi = app.project_info
+    keys = ", ".join(pi.context_files[:5]) or "—"
+    content = (
+        f"# {Path(app.cwd).name}\n\n"
+        "> Project instructions for KaiCode. Read automatically every session.\n"
+        "> (Rename to AGENTS.md or AGENTS.md and other tools pick it up too.)\n\n"
+        "## Overview\n"
+        f"- Type: {pi.description}\n"
+        f"- Key files: {keys}\n\n"
+        "## Conventions\n"
+        "- Describe coding style, naming, and patterns to follow here.\n\n"
+        "## Commands\n"
+        "- Build:\n- Test:\n- Run:\n\n"
+        "## Notes for the assistant\n"
+        "- Complete tasks fully using tools; verify by running tests.\n"
+        "- Keep changes minimal and match the existing style.\n\n"
+        f"## Codebase map ({file_count} files)\n```\n{repo_map}\n```\n"
+    )
+    target.write_text(content, encoding="utf-8")
+    print_success(f"Created {target}")
+    print_info("Edit it to add project-specific instructions — KaiCode reads it each session.")
 
 
 async def handle_command(cmd: str, app) -> None:
@@ -178,6 +254,18 @@ async def handle_command(cmd: str, app) -> None:
 
     elif command == "/clear":
         app.clear_history()
+
+    elif command == "/init":
+        await _init_project(app, overwrite=(args.strip() == "--force"))
+
+    elif command in ("/undo", "/u"):
+        app.undo()
+
+    elif command == "/redo":
+        app.redo()
+
+    elif command == "/changes":
+        app.list_changes()
 
     elif command == "/model":
         if args:
@@ -236,7 +324,7 @@ async def handle_command(cmd: str, app) -> None:
                 header_style="kaicode.muted",
                 padding=(0, 1),
             )
-            t.add_column("Name", style="bold kaicode.assistant")
+            t.add_column("Name", style="kaicode.assistant")
             t.add_column("Provider", style="kaicode.info")
             t.add_column("Model", style="kaicode.model")
             t.add_column("Messages", justify="right", style="dim")
@@ -368,7 +456,7 @@ async def _pick_model(models: list[str], app) -> None:
 @click.option("--model", "-m", default=None, help="Model name")
 @click.option("--session", "-s", default=None, help="Load a saved session")
 @click.option("--config", "-c", "config_path", default=None, help="Path to config file")
-@click.version_option(version="2.0.2", prog_name="kaicode")
+@click.version_option(version="2.1.0", prog_name="kaicode")
 @click.argument("prompt", nargs=-1)
 def main(provider, model, session, config_path, prompt):
     """KaiCode — Terminal AI coding assistant.\n\nSupports Ollama, OpenAI, OpenAI, Groq, and any OpenAI-compatible API."""

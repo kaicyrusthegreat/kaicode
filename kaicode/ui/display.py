@@ -16,7 +16,9 @@ from rich.table import Table
 from rich.tree import Tree
 from rich import box
 
-from kaicode.ui.theme import KAICODE_THEME, ASCII_LOGO, LOGO_COMPACT, KAICODE_VERSION
+from kaicode.ui.theme import (
+    KAICODE_THEME, ASCII_LOGO, LOGO_COMPACT, KAICODE_VERSION, LOGO_GRADIENT,
+)
 
 
 console = Console(theme=KAICODE_THEME, highlight=False)
@@ -114,31 +116,42 @@ def print_header(model: str, provider: str, cwd: str) -> None:
     branch = _get_git_branch(cwd)
 
     header = Text()
-    header.append(" ⟨ KaiCode ⟩ ", style="kaicode.logo")
-    header.append("  ")
+    header.append(" ◆ ", style="kaicode.logo")
+    header.append("KaiCode", style="kaicode.bubble.kai.name")
+    header.append("  ·  ", style="kaicode.muted")
     header.append(provider, style="kaicode.assistant")
     header.append(" / ", style="kaicode.muted")
     header.append(model, style="kaicode.model")
-    header.append("  ")
+    header.append("  ·  ", style="kaicode.muted")
     header.append(cwd_short, style="kaicode.dir")
     if branch:
-        header.append("  ")
+        header.append("  ", style="kaicode.muted")
         header.append(f"({branch})", style="kaicode.branch")
-    header.append("  ")
-    header.append("by Kai Cyrus", style="kaicode.footer")
 
     console.rule(header, style="kaicode.separator")
 
 
 def print_splash() -> None:
-    console.print(Align.center(Text(ASCII_LOGO, style="kaicode.logo")))
+    # Block logo rendered with a vertical blue→teal gradient (one color per row).
+    rows = [ln for ln in ASCII_LOGO.split("\n") if ln.strip("\r")]
+    logo = Text(justify="center")
+    last = len(rows) - 1
+    for i, row in enumerate(rows):
+        color = LOGO_GRADIENT[min(i, len(LOGO_GRADIENT) - 1)]
+        logo.append(row + ("\n" if i < last else ""), style=f"bold {color}")
+    console.print()
+    console.print(Align.center(logo))
 
-    tagline = Text()
+    # Framed tagline: a divider rule the width of the logo, then the meta line.
+    width = min(max((len(r) for r in rows), default=40), 54)
+    console.print(Align.center(Text("─" * width, style="kaicode.separator")))
+
+    tagline = Text(justify="center")
     tagline.append(f"v{KAICODE_VERSION}", style="kaicode.footer")
     tagline.append("  ·  ", style="kaicode.muted")
-    tagline.append("by Kai Cyrus", style="kaicode.footer")
+    tagline.append("Multi-provider AI coding assistant", style="kaicode.assistant")
     tagline.append("  ·  ", style="kaicode.muted")
-    tagline.append("Multi-provider AI coding assistant", style="kaicode.info")
+    tagline.append("by Kai Cyrus", style="kaicode.footer")
     console.print(Align.center(tagline))
     console.print()
 
@@ -146,40 +159,40 @@ def print_splash() -> None:
 def print_user_message(content: str) -> None:
     console.print()
     console.print(Panel(
-        Text(content, style="#e8f5e9"),
-        title="[bold #e8f5e9 on #2e7d32]  User  [/]",
+        Text(content, style="kaicode.msg.user"),
+        box=box.ROUNDED,
+        title="[kaicode.bubble.user]◇[/] [kaicode.bubble.user.name]You[/]",
         title_align="left",
-        border_style="#43a047",
-        style="on #1a3a1a",
+        border_style="kaicode.bubble.user",
         padding=(0, 2),
     ))
     console.print()
 
 
 def print_plan(content: str) -> None:
-    """Show the model's plan before tool execution — amber/yellow bubble."""
-    renderable = Markdown(content, code_theme="monokai") if ("```" in content or "`" in content) else Text(content, style="#fff8e1")
+    """Show the model's plan before tool execution — amber chip bubble."""
+    renderable = Markdown(content, code_theme="monokai") if ("```" in content or "`" in content) else Text(content, style="kaicode.msg.plan")
     console.print()
     console.print(Panel(
         renderable,
-        title="[bold #fff8e1 on #e65100]  Plan  [/]",
+        box=box.ROUNDED,
+        title="[kaicode.bubble.plan]◆[/] [kaicode.bubble.plan.name]Plan[/]",
         title_align="left",
-        border_style="#e65100",
-        style="on #2a1500",
-        padding=(0, 2),
+        border_style="kaicode.bubble.plan",
+        padding=(1, 2),
     ))
 
 
 def print_kai_message(content: str) -> None:
-    renderable = Markdown(content, code_theme="monokai") if ("```" in content or "`" in content) else Text(content, style="#e3f2fd")
+    renderable = Markdown(content, code_theme="monokai") if ("```" in content or "`" in content) else Text(content, style="kaicode.msg.kai")
     console.print()
     console.print(Panel(
         renderable,
-        title="[bold #e3f2fd on #1565c0]  KaiCode  [/]",
+        box=box.ROUNDED,
+        title="[kaicode.bubble.kai]◆[/] [kaicode.bubble.kai.name]KaiCode[/]",
         title_align="left",
-        border_style="#2196f3",
-        style="on #0d1f3c",
-        padding=(0, 2),
+        border_style="kaicode.bubble.kai",
+        padding=(1, 2),
     ))
     console.print()
 
@@ -433,21 +446,26 @@ def print_help() -> None:
         pad_edge=True,
         padding=(0, 1),
     )
-    table.add_column("Command",     style="bold kaicode.assistant", width=20)
+    table.add_column("Command",     style="kaicode.assistant", width=20)
     table.add_column("Description")
 
     sections = [
         ("Models & Providers", ""),
         ("/model [name]",    "Switch model — shows picker if no name given"),
         ("/provider [name]", "Switch provider — ollama / openai / openai / groq"),
+        ("Project & Code", ""),
+        ("/init [--force]",  "Generate a KAICODE.md with project instructions"),
+        ("/diff",            "Show the last applied diff"),
+        ("/context",         "Show auto-detected context files"),
+        ("/memory",          "Show project memory (use /memory clear to reset)"),
+        ("Safety & History", ""),
+        ("/undo",            "Revert the last file change the agent made"),
+        ("/redo",            "Re-apply the last undone change"),
+        ("/changes",         "List file changes made this session"),
         ("Sessions", ""),
         ("/save [name]",     "Save current conversation"),
         ("/load <name>",     "Load a saved conversation"),
         ("/sessions",        "List all saved sessions"),
-        ("Context & Code", ""),
-        ("/diff",            "Show the last applied diff"),
-        ("/context",         "Show auto-detected context files"),
-        ("/memory",          "Show project memory (use /memory clear to reset)"),
         ("Conversation", ""),
         ("/clear",           "Clear conversation history"),
         ("/status",          "Show tokens, model, and provider"),
@@ -473,7 +491,7 @@ def print_help() -> None:
         header_style="kaicode.muted",
         padding=(0, 1),
     )
-    perm.add_column("Key",    style="bold kaicode.assistant", width=5, justify="center")
+    perm.add_column("Key",    style="kaicode.assistant", width=5, justify="center")
     perm.add_column("Action")
     perm.add_row("1", "Yes, do it")
     perm.add_row("2", "No, skip this action")
@@ -483,7 +501,9 @@ def print_help() -> None:
     console.print()
 
     console.print(Text("  Tips", style="bold kaicode.assistant"))
-    console.print(Text("  ·  Read-only tools (read_file, search, git status) run without asking", style="kaicode.muted"))
-    console.print(Text("  ·  Write and execute tools always ask for permission first",            style="kaicode.muted"))
-    console.print(Text("  ·  Use /model to switch between local Ollama models and cloud APIs",   style="kaicode.muted"))
+    console.print(Text("  ·  @path        include a specific file as context  (e.g. @kaicode/app.py)", style="kaicode.muted"))
+    console.print(Text("  ·  !command     run a shell command inline  (e.g. !git status)",             style="kaicode.muted"))
+    console.print(Text("  ·  /undo        safely revert the agent's last file change",                 style="kaicode.muted"))
+    console.print(Text("  ·  KAICODE.md   standing instructions, auto-loaded every session",           style="kaicode.muted"))
+    console.print(Text("  ·  Read-only tools run without asking; writes/exec ask first",               style="kaicode.muted"))
     console.print()

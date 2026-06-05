@@ -21,6 +21,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from kaicode.config import KaiConfig
+from kaicode.checkpoint import CheckpointStack
 from kaicode.providers import get_provider, BaseProvider
 from kaicode.providers.base import Message, StreamChunk
 from kaicode.session import Session
@@ -407,23 +408,62 @@ def _format_permission_detail(tool_name: str, args: dict) -> str:
 # ── Streaming status display ──────────────────────────────────────────────────
 
 class _StreamStatus:
+    """Live status + streamed-text view shown while the model generates.
+
+    Begins as a phase spinner ('Thinking… (3s)'); once visible tokens arrive it
+    streams them live so the user sees output immediately instead of staring at
+    a frozen spinner. The text is tail-capped so the transient Live region never
+    grows past the viewport (which would ghost on clear). The polished Markdown
+    panel is still printed separately once streaming completes.
+    """
     _PHASES = ["Thinking", "Reasoning", "Deciphering", "Processing"]
+    _MAX_LINES = 14
 
     def __init__(self, label: str = "") -> None:
         self._start = time.monotonic()
         self._label = label
+        self.raw = ""            # live-updated with the accumulated response
 
     def _elapsed(self) -> int:
         return int(time.monotonic() - self._start)
 
-    def __rich__(self) -> Text:
-        elapsed = self._elapsed()
-        phase = self._label or self._PHASES[min(elapsed // 6, len(self._PHASES) - 1)]
+    def _header(self, phase: str) -> Text:
         t = Text()
         t.append("  ✽ ", style="kaicode.assistant")
         t.append(f"{phase}… ", style="kaicode.info")
-        t.append(f"({elapsed}s)", style="kaicode.muted")
+        t.append(f"({self._elapsed()}s)", style="kaicode.muted")
         return t
+
+    def _visible(self) -> tuple[str, bool]:
+        """Return (text-to-show, still_inside_a_think_block)."""
+        text = re.sub(r'<think>.*?</think>\s*', '', self.raw, flags=re.DOTALL)
+        open_idx = text.rfind('<think>')      # an unclosed (in-progress) think
+        thinking = open_idx != -1
+        if thinking:
+            text = text[:open_idx]
+        return text.strip(), thinking
+
+    def __rich__(self) -> Text:
+        visible, thinking = self._visible()
+        if not visible:
+            elapsed = self._elapsed()
+            phase = self._label or (
+                "Thinking" if thinking
+                else self._PHASES[min(elapsed // 6, len(self._PHASES) - 1)]
+            )
+            return self._header(phase)
+
+        lines = visible.splitlines()
+        truncated = len(lines) > self._MAX_LINES
+        if truncated:
+            lines = lines[-self._MAX_LINES:]
+
+        out = self._header(self._label or "Responding")
+        out.append("\n")
+        if truncated:
+            out.append("  …\n", style="kaicode.muted")
+        out.append("\n".join(lines), style="kaicode.msg.kai")
+        return out
 
 
 # ── Main application ──────────────────────────────────────────────────────────
@@ -451,6 +491,7 @@ class KaiApp:
         self._tokens_used: int = 0
         self._always_allowed: set[str] = set()
         self._tools_disabled: bool = False
+        self.checkpoints = CheckpointStack()   # undo/redo of agent file changes
 
     def _default_model(self) -> str:
         defaults = {
@@ -478,6 +519,26 @@ class KaiApp:
         while trimmed and trimmed[0].role == "tool":
             trimmed = trimmed[1:]
         return trimmed
+
+    def _resolve(self, path: str) -> str:
+        """Resolve a possibly-relative tool path against the session cwd."""
+        return str((Path(self.cwd) / path).expanduser())
+
+    _MENTION_RE = re.compile(r'(?:^|\s)@([^\s@]+)')
+
+    def _expand_mentions(self, text: str) -> list[tuple[str, str]]:
+        """Explicit @path mentions → (path, content). User-directed and reliable,
+        unlike the fuzzy auto-detect; takes precedence when present."""
+        found: dict[str, str] = {}
+        for raw in self._MENTION_RE.findall(text):
+            cand = raw.rstrip('.,;:!?)')
+            p = (Path(self.cwd) / cand).expanduser()
+            try:
+                if p.is_file() and p.stat().st_size < 200_000:
+                    found[cand] = p.read_text("utf-8", errors="replace")[:8000]
+            except Exception:
+                pass
+        return list(found.items())
 
     def _find_relevant_files(self, user_input: str) -> list[tuple[str, str]]:
         """Auto-detect files relevant to the user's message."""
@@ -536,10 +597,27 @@ class KaiApp:
 
     async def chat(self, user_input: str) -> None:
         """Process one user turn through the agentic loop."""
+        # Compute intent / tool selection ONCE — user_input is constant for the
+        # whole turn, so there's no reason to recompute these every iteration.
+        needs_tools = _needs_tools(user_input)
+        base_tools = _select_tools(user_input) if needs_tools else None
+
         # ── Build context ──────────────────────────────────────────────────
-        # Only search for relevant files on task messages (not chat)
-        if _needs_tools(user_input):
-            relevant = self._find_relevant_files(user_input)
+        # Explicit @path mentions win — they're precise and user-directed. Only
+        # fall back to the fuzzy repo search (off the event loop, hard timeout —
+        # a big repo must never freeze the UI before the model is contacted)
+        # when the user didn't point at anything themselves.
+        mentions = self._expand_mentions(user_input)
+        if mentions:
+            relevant = mentions
+        elif needs_tools:
+            try:
+                relevant = await asyncio.wait_for(
+                    asyncio.to_thread(self._find_relevant_files, user_input),
+                    timeout=2.5,
+                )
+            except (asyncio.TimeoutError, Exception):
+                relevant = []
         else:
             relevant = []
 
@@ -563,19 +641,16 @@ class KaiApp:
             pending_tool_calls: list[dict] = []
             usage: dict | None = None
             label = "Working" if iteration > 0 else ""
-            live = Live(_StreamStatus(label), console=console, transient=True, refresh_per_second=10)
+            status = _StreamStatus(label)
+            live = Live(status, console=console, transient=True, refresh_per_second=10)
             live.start()
 
             # ESC listener is active ONLY while streaming (raw mode would
             # otherwise corrupt panel rendering during printing).
             cancel.start_listening()
 
-            # Select relevant tools (not all tools every time)
-            active_tools = (
-                None if self._tools_disabled
-                else _select_tools(user_input) if _needs_tools(user_input)
-                else None
-            )
+            # Tools were selected once at the top of the turn (constant input).
+            active_tools = None if self._tools_disabled else base_tools
 
             # Trim history to fit context window
             trimmed_messages = self._trim_messages(self.session.messages)
@@ -586,6 +661,7 @@ class KaiApp:
                 assistant_content = ""
                 pending_tool_calls = []
                 usage = None
+                status.raw = ""
                 try:
                     stream = self.provider.stream_chat(
                         messages=trimmed_messages,
@@ -607,6 +683,7 @@ class KaiApp:
                             return
                         if chunk.content:
                             assistant_content += chunk.content
+                            status.raw = assistant_content   # live-stream to screen
                         if chunk.tool_call:
                             pending_tool_calls.append(chunk.tool_call)
                         if chunk.usage:
@@ -623,7 +700,8 @@ class KaiApp:
                         print_info(f"'{self.model}' doesn't support native tools — using text-based tool calls.")
                         # Don't return — just retry this iteration without native tools
                         active_tools = None
-                        live = Live(_StreamStatus(label), console=console, transient=True, refresh_per_second=10)
+                        status = _StreamStatus(label)
+                        live = Live(status, console=console, transient=True, refresh_per_second=10)
                         live.start()
                         continue
                     if "ollama error 404" in err.lower() and self.provider_name == "ollama":
@@ -644,7 +722,8 @@ class KaiApp:
                         wait = 1.5 * (attempt + 1)
                         print_info(f"Transient error — retrying in {wait:.0f}s ({attempt + 1}/{MAX_RETRIES})…")
                         await asyncio.sleep(wait)
-                        live = Live(_StreamStatus("Retrying"), console=console, transient=True, refresh_per_second=10)
+                        status = _StreamStatus("Retrying")
+                        live = Live(status, console=console, transient=True, refresh_per_second=10)
                         live.start()
                         continue
                     print_error(f"Provider error: {e}")
@@ -735,20 +814,32 @@ class KaiApp:
                 tool_id   = tc.get("id", "")
 
                 approved = await self._request_permission(tool_name, tool_args, reason=assistant_content.strip())
+                is_write = tool_name in ("edit_file", "create_file")
+                target = self._resolve(tool_args.get("path", "")) if is_write else ""
+                before = CheckpointStack.snapshot(target) if is_write else None
                 if not approved:
                     result = json.dumps({"error": "User denied this action."})
                 else:
                     print_tool_call(tool_name, tool_args)
-                    result = self.tool_registry.call(tool_name, tool_args)
+                    # Tools do blocking file IO / subprocesses (run_command can
+                    # take 30s) — run them in a worker thread so the event loop
+                    # stays responsive.
+                    result = await asyncio.to_thread(
+                        self.tool_registry.call, tool_name, tool_args)
                     print_tool_result(tool_name, result)
 
-                if tool_name in ("edit_file", "create_file"):
+                if is_write:
                     try:
                         rdata = json.loads(result)
                         if "diff" in rdata:
                             self.last_diff = rdata["diff"]
                         if rdata.get("success"):
-                            verify_err = self._verify_file(tool_args.get("path", ""))
+                            # Checkpoint the change so /undo can revert it exactly.
+                            saved_path = rdata.get("path") or target
+                            after = CheckpointStack.snapshot(saved_path)
+                            self.checkpoints.record(saved_path, before, after, tool_name)
+                            verify_err = await asyncio.to_thread(
+                                self._verify_file, tool_args.get("path", ""))
                             if verify_err:
                                 print_error("Syntax check failed — feeding error back to model")
                                 console.print(Text(f"  {verify_err}", style="kaicode.error"))
@@ -865,6 +956,40 @@ class KaiApp:
         self._tokens_used = 0
         self.last_diff = ""
         print_info("Conversation cleared.")
+
+    # ── Checkpoint / undo ──────────────────────────────────────────────────
+    def _rel(self, path: str) -> str:
+        try:
+            return str(Path(path).resolve().relative_to(Path(self.cwd).resolve()))
+        except Exception:
+            return path
+
+    def undo(self) -> None:
+        ch = self.checkpoints.undo()
+        if ch is None:
+            print_info("Nothing to undo.")
+            return
+        verb = {"created": "Removed created", "deleted": "Restored deleted",
+                "edited": "Reverted"}.get(ch.label, "Reverted")
+        print_success(f"{verb} {self._rel(ch.path)}")
+
+    def redo(self) -> None:
+        ch = self.checkpoints.redo()
+        if ch is None:
+            print_info("Nothing to redo.")
+            return
+        print_success(f"Re-applied change to {self._rel(ch.path)}")
+
+    def list_changes(self) -> None:
+        history = self.checkpoints.history()
+        if not history:
+            print_info("No file changes this session.")
+            return
+        print_info(f"{len(history)} change(s) this session (newest last):")
+        for ch in history:
+            console.print(
+                f"  [kaicode.muted]{ch.label:>7}[/]  [kaicode.dir]{self._rel(ch.path)}[/]"
+            )
 
     def save_session(self, name: str | None = None) -> None:
         print_success(f"Session saved: {self.session.save(name)}")
