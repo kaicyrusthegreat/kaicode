@@ -117,5 +117,53 @@
 
 ---
 
+#### 8. System Prompt Optimization (Performance)
+- **Files**: `project_detector.py`
+- **Before**: ~1,477 tokens (embedded file contents, full git log + diff, verbose tool list)
+- **After**: ~339 tokens (file names only, slim git context, compact rules)
+- **Key changes**:
+  - Removed full file content injection → just lists file names (model uses `read_file` when needed)
+  - New `_git_context_slim()` — branch + last 4 commits only (no diff, no full log)
+  - Memory capped at 500 chars
+  - Tool listing removed (already in tool definitions JSON)
+  - Rules compacted from 11 verbose items → 8 concise items
+- **Result**: -77% system prompt tokens
+
+---
+
+#### 9. Ollama Error Detection & Retry
+- **Files**: `providers/ollama.py`, `app.py`
+- **Issue**: Ollama returns errors as `{"error": "..."}` in stream — was silently swallowed
+- **Fix**: Added `if "error" in data: raise ProviderError(...)` in stream parser
+- **Also**: Added `"model output error"` and `"both be empty"` to transient retry markers
+- **Removed**: `num_ctx: 8192` override (was causing context conflicts with loaded models)
+
+---
+
+#### 10. ESC-to-Cancel During Streaming
+- **File**: `app.py`
+- **Feature**: Press ESC while model is generating → stops generation, shows partial output
+- **Implementation**: Background thread in `_CancelFlag` class listens for `\x1b` on stdin
+- **UX**: Shows partial response with "⚡ *cancelled*" suffix, saves to history
+
+---
+
+#### 11. Slash Command Autocomplete
+- **File**: `main.py`
+- **Feature**: Type `/` → dropdown menu of all slash commands with descriptions
+- **Implementation**: `SlashCompleter` class using prompt_toolkit's `Completer`
+- **Commands**: /model, /provider, /save, /load, /sessions, /diff, /context, /memory, /clear, /status, /help, /quit
+- **Styling**: Custom Catppuccin-themed completion menu (dark bg, green highlight)
+
+---
+
+#### 12. Updated Toolbar Hints
+- **File**: `main.py`
+- **Before**: "⏵⏵ accept edits on (shift+tab to cycle) · ← for agents"
+- **After**: "ESC cancel · / commands · Ctrl+C quit"
+- **Reason**: Toolbar now shows actual keybindings relevant to the user
+
+---
+
 *Logged by Antigravity IDE — 2026-06-04*
 

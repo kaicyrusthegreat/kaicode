@@ -10,3 +10,6 @@ build/
 .pytest_cache/
 .mypy_cache/
 *.egg
+
+# Local conversation transcripts (not shipped)
+chat_history/

@@ -148,6 +148,41 @@ def _git_context_slim(root: Path) -> str:
     return "\n".join(lines)
 
 
+# Project-instruction files, in precedence order. KaiCode reads its own first,
+# then stays compatible with KaiCode (AGENTS.md) and the open AGENTS.md
+# standard — so a repo set up for any of those Just Works here too.
+INSTRUCTION_FILES = ["KAICODE.md", "AGENTS.md", "AGENTS.md", ".kaicoderules"]
+
+
+def load_instructions(root: Path) -> str:
+    """Collect persistent instructions: global (~/.kaicode/KAICODE.md) + the
+    first project instruction file found by precedence. Returns a formatted
+    block ready to fold into the system prompt (empty string if none)."""
+    chunks: list[str] = []
+
+    global_file = Path.home() / ".kaicode" / "KAICODE.md"
+    try:
+        if global_file.is_file():
+            text = global_file.read_text(encoding="utf-8", errors="replace").strip()
+            if text:
+                chunks.append(f"### Global (~/.kaicode/KAICODE.md)\n{text[:4000]}")
+    except Exception:
+        pass
+
+    for name in INSTRUCTION_FILES:
+        p = root / name
+        try:
+            if p.is_file():
+                text = p.read_text(encoding="utf-8", errors="replace").strip()
+                if text:
+                    chunks.append(f"### {name}\n{text[:8000]}")
+                    break   # highest-precedence project file wins
+        except Exception:
+            continue
+
+    return "\n\n".join(chunks)
+
+
 def build_system_prompt(project_info: ProjectInfo, extra: str = "", model: str = "") -> str:
     sections: list[str] = []
 
@@ -172,6 +207,16 @@ def build_system_prompt(project_info: ProjectInfo, extra: str = "", model: str =
     if memory.strip():
         mem = memory.strip()[:500]
         sections.append(f"## Memory\n{mem}")
+
+    # Inject project instructions (KAICODE.md / AGENTS.md / AGENTS.md). These are
+    # authoritative — the user's own standing orders for this repo.
+    instructions = load_instructions(project_info.root)
+    if instructions:
+        sections.append(
+            "## Project Instructions\n"
+            "Follow these standing instructions for this project — they override "
+            "general defaults:\n\n" + instructions
+        )
 
     sections.append("""## Rules
 1. COMPLETE THE WHOLE TASK using tools. Never ask "shall I continue?" — just do it.

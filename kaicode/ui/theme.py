@@ -3,7 +3,7 @@
 from rich.theme import Theme
 
 
-KAICODE_VERSION = "2.0.2"
+KAICODE_VERSION = "2.1.0"
 
 # Dual-mode palette — mid-saturation colors readable on dark AND light terminals
 KAICODE_THEME = Theme({
@@ -34,7 +34,23 @@ KAICODE_THEME = Theme({
     "kaicode.system":          "italic #e65100",
     "kaicode.status_bar":      "default",
     "kaicode.tag":             "bold default on #1976d2",
+    # ── Refined message bubbles ───────────────────────────────────────────
+    "kaicode.bubble.kai":      "#2196f3",        # KaiCode border  — brand blue
+    "kaicode.bubble.kai.name": "bold #7cc4ff",   # KaiCode title text
+    "kaicode.bubble.user":     "#43a047",        # You border      — green
+    "kaicode.bubble.user.name":"bold #a5d6a7",   # You title text
+    "kaicode.bubble.plan":     "#e65100",        # Plan border     — amber
+    "kaicode.bubble.plan.name":"bold #ffcc80",   # Plan title text
+    "kaicode.msg.kai":         "#cfe3ff",        # KaiCode body text
+    "kaicode.msg.user":        "#e8f5e9",        # You body text
+    "kaicode.msg.plan":        "#fff3e0",        # Plan body text
 })
+
+# Vertical blue→teal gradient for the launch logo (one color per glyph row).
+# Interpolated from kaicode.logo (#2196f3) to kaicode.assistant (#00838f).
+LOGO_GRADIENT = [
+    "#2196f3", "#1a92df", "#148ecb", "#0d8bb7", "#0787a3", "#00838f",
+]
 
 ASCII_LOGO = r"""
  ██╗  ██╗ █████╗ ██╗ ██████╗ ██████╗ ██████╗ ███████╗
