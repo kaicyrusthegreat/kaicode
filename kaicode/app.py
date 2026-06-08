@@ -37,11 +37,30 @@ from kaicode.ui.display import (
     print_success,
     print_kai_message,
     print_plan,
+    print_change_preview,
 )
 
 
 MAX_TOOL_ITERATIONS = 25
 MAX_HISTORY_MESSAGES = 50   # trim older messages beyond this
+
+# Words the symbol-reference heuristic must never auto-search for — they appear
+# in nearly every file (README especially), so searching them auto-loads junk.
+_STOPWORD_SYMS = {
+    "the", "this", "that", "these", "those", "file", "files", "code", "line",
+    "lines", "function", "class", "method", "value", "error", "issue", "bug",
+    "feature", "change", "changes", "thing", "stuff", "part", "name", "data",
+    "text", "list", "item", "with", "from", "into", "your", "you", "and",
+    "for", "all", "any", "one", "two", "new", "old", "use", "using", "make",
+    "show", "add", "fix", "run", "see", "get", "set", "test", "tests",
+    # Common 6+ letter English words that slip past the identifier filter and
+    # pull in irrelevant files (they appear as "the message", "the result"…).
+    "message", "commit", "result", "results", "sample", "sentence", "project",
+    "repository", "directory", "folder", "subfolder", "subfolders", "error",
+    "errors", "output", "confirm", "contents", "content", "command", "commands",
+    "afterward", "argument", "arguments", "example", "examples", "exactly",
+    "number", "numbers", "string", "values", "create", "created", "inside",
+}
 
 # ── Tool selection ────────────────────────────────────────────────────────────
 
@@ -118,20 +137,34 @@ _HAS_TASK = re.compile(
     re.I,
 )
 
+# The only escape sequences JSON permits after a backslash inside a string.
+_VALID_JSON_ESCAPES = set('"\\/bfnrtu')
+
 def _sanitize_json_block(block: str) -> str:
-    """Escape raw control chars that appear inside JSON string values, so
-    json.loads accepts the not-quite-valid JSON that local models emit
-    (e.g. real newlines inside a 'content' field holding source code)."""
+    """Repair the not-quite-valid JSON that local models emit so json.loads
+    accepts it. Two fixes:
+      • raw control chars inside a string value (real newlines/tabs in a
+        'content' field holding source code) → escaped;
+      • INVALID escape sequences — most often \\' (a Python single-quote habit:
+        "cwd: str = \\'.\\'"), which JSON rejects. The backslash is dropped,
+        keeping the char, so \\' becomes a plain '. This is the single most
+        common reason a model's text tool call fails to parse."""
     out: list[str] = []
     in_str = False
-    esc = False
+    esc = False          # previous char was a backslash, awaiting its escapee
     for c in block:
         if in_str:
             if esc:
-                out.append(c)
+                if c in _VALID_JSON_ESCAPES:
+                    out.append("\\")
+                    out.append(c)
+                else:
+                    # Invalid JSON escape (e.g. \') — drop the backslash, keep c.
+                    out.append(c)
                 esc = False
             elif c == "\\":
-                out.append(c)
+                # Defer: decide whether to keep the backslash once we see what it
+                # is escaping (so we can strip it for invalid escapes like \').
                 esc = True
             elif c == '"':
                 out.append(c)
@@ -148,6 +181,8 @@ def _sanitize_json_block(block: str) -> str:
             out.append(c)
             if c == '"':
                 in_str = True
+    if esc:           # trailing lone backslash at end of block — drop it
+        pass
     return "".join(out)
 
 
@@ -280,8 +315,48 @@ def _extract_text_tool_calls(content: str, valid_names: set[str]) -> tuple[str, 
     return content, []
 
 
+_THINK_BLOCK_RE = re.compile(r'<think>.*?</think>', re.DOTALL)
+# Some models use other delimiters for chain-of-thought; treat them the same.
+_THINK_OPEN_RE = re.compile(r'<think>|<thinking>|◁think▷', re.I)
+_THINK_CLOSE_RE = re.compile(r'</think>|</thinking>|◁/think▷', re.I)
+
+
+def _strip_reasoning(text: str) -> str:
+    """Remove a reasoning model's chain-of-thought so only the final answer is
+    shown. Handles the three shapes local 'thinking' models actually emit:
+
+        <think>…</think> answer     well-formed block
+        …reasoning… </think> answer  OPENING TAG MISSING (the model/template
+                                     started already 'inside' the think block —
+                                     this is the case that used to leak the whole
+                                     monologue into the reply)
+        <think>… (no close yet)      unclosed block mid-stream — nothing to show
+    """
+    text = _THINK_BLOCK_RE.sub('', text)
+    # A dangling close tag means everything before it was hidden reasoning that
+    # never got an opening tag — drop up to and including the last close tag.
+    m = None
+    for m in _THINK_CLOSE_RE.finditer(text):
+        pass
+    if m:
+        text = text[m.end():]
+    # An unclosed opening tag means we're still mid-reasoning — drop from it on.
+    om = _THINK_OPEN_RE.search(text)
+    if om:
+        text = text[:om.start()]
+    return text.strip()
+
+
 def _needs_tools(message: str) -> bool:
     msg = message.strip()
+    # A short, genuine question ("What features could we ADD?", "How do I
+    # CREATE X?") is informational even though it contains action-verb nouns.
+    # This must be checked BEFORE _HAS_TASK, whose verb list would otherwise
+    # match those nouns and misroute the question through the tool path.
+    # (_EXPLAIN_REQUEST is question-starters only — not the bare ack words in
+    # _CHAT_RE like "ok"/"sure", which legitimately precede a task.)
+    if _EXPLAIN_REQUEST.match(msg) and len(msg) < 120:
+        return False
     if _HAS_TASK.search(msg):
         return True
     if _CHAT_RE.match(msg) and len(msg) < 120:
@@ -294,6 +369,55 @@ def _is_real_plan(text: str) -> bool:
     """True only when the model wrote a genuine numbered list (2+ steps)."""
     items = re.findall(r'(?:^|\n)\s*[1-9]\d*[.)]\s+\w', text)
     return len(items) >= 2
+
+
+# A request that asks for real work to happen (build/create/fix...), as opposed
+# to a question (explain/what/how...). Used to detect the #1 local-model failure:
+# the model *describes* the work or dumps code in chat but never calls a tool.
+_ACTION_REQUEST = re.compile(
+    r'\b(create|creat|make|making|build|add|implement|writ|generat|scaffold|'
+    r'set ?up|fix|refactor|rename|delete|remove|update|edit|run|install|deploy|'
+    r'organi[sz]e|move|copy|sort|put|place|convert|rewrite|replace|split|merge|'
+    r'extract|download|configure|format|clean|optimi[sz]e|append|insert|mark|'
+    r'change|modify|migrate|rename|wrap|commit|push|execute)\b',
+    re.I,
+)
+_EXPLAIN_REQUEST = re.compile(
+    r'^\s*(explain|what|what\'s|how|why|who|when|where|describe|tell me|'
+    r'can you explain|show me how|is |are |does |do |should )',
+    re.I,
+)
+
+
+def _talked_instead_of_acting(user_input: str, content: str) -> bool:
+    """True when the user asked for real work but the model replied with prose
+    (often a ``` code block) and made NO tool calls — so nothing happened.
+
+    A specific action verb (create/move/refactor/…) is the strongest signal, but
+    the verb list can never be exhaustive ("transpile this", "tidy up these"…).
+    So we also treat any non-question, task-shaped request (one _needs_tools
+    already flagged) that came back as pure prose as a likely no-op. The caller
+    guards this to fire at most once per turn, so a false positive costs only a
+    single extra nudge — far cheaper than silently doing nothing."""
+    if not content.strip():
+        return False
+    if _EXPLAIN_REQUEST.match(user_input.strip()):
+        return False
+    return bool(_ACTION_REQUEST.search(user_input)) or _needs_tools(user_input)
+
+
+# A tool call written as JSON text: {"name": "edit_file", ...}. We look for the
+# name/tool/function key pointing at a real tool. If this shape is present but the
+# turn produced NO executed tool calls, the model emitted a tool call that failed
+# to parse (almost always invalid JSON — unescaped " or \ inside a string value,
+# e.g. code or triple-quotes in `content`). It needs a JSON-specific correction,
+# not the generic "you only talked" nudge.
+_TOOLCALL_SHAPE_RE = re.compile(r'"(?:name|tool|function)"\s*:\s*"([a-zA-Z_][\w]*)"')
+
+def _has_unparsed_tool_call(content: str, valid_names: set[str]) -> bool:
+    if not content or "{" not in content:
+        return False
+    return any(m.group(1) in valid_names for m in _TOOLCALL_SHAPE_RE.finditer(content))
 
 # Substrings that indicate a retryable, transient provider failure
 _TRANSIENT_MARKERS = (
@@ -315,11 +439,14 @@ MAX_RETRIES = 2
 class _CancelFlag:
     """Thread-safe ESC-to-cancel during streaming.
 
-    The listener puts the shared TTY into raw mode, which disables ONLCR
-    (newline → CRLF translation) on OUTPUT too. So cooked mode MUST be
-    restored before anything is printed, or Rich panels render as a
-    right-shifted 'staircase' ghost. stop() therefore joins the thread and
-    restores the terminal synchronously before returning.
+    The listener uses cbreak mode (not raw): cbreak turns off canonical input
+    and echo — enough to read ESC a character at a time — but LEAVES output
+    processing (OPOST/ONLCR) on. Raw mode disables ONLCR, which breaks the
+    newline→CRLF translation that Rich's Live relies on to reposition the
+    cursor; with it off, every Live refresh is appended below the last instead
+    of overwriting it, producing the repeated-frame 'staircase' ghosting.
+    stop() still joins the thread and restores the terminal synchronously
+    before any panels are printed.
     """
     def __init__(self):
         self.cancelled = False
@@ -342,7 +469,9 @@ class _CancelFlag:
 
     def _listen(self):
         try:
-            tty.setraw(self._fd)
+            # cbreak (not setraw) — keeps OPOST/ONLCR on so Rich's Live can
+            # redraw in place instead of ghosting frame after frame.
+            tty.setcbreak(self._fd, termios.TCSANOW)
             while not self.cancelled:
                 if select.select([sys.stdin], [], [], 0.1)[0]:
                     if sys.stdin.read(1) == '\x1b':  # ESC
@@ -369,6 +498,13 @@ class _CancelFlag:
 
 
 # ── Permission helpers ────────────────────────────────────────────────────────
+
+# Read-only tools are safe (and sometimes sensible) to repeat verbatim, so the
+# stuck-loop guard ignores them; it only fires on state-changing calls.
+_READONLY_TOOLS = {
+    "read_file", "list_files", "search_files", "grep_ast", "repo_map",
+    "git_status", "git_diff", "web_fetch", "web_search",
+}
 
 _AUTO_APPROVE_TOOLS = {
     "read_file", "list_files", "search_files",
@@ -408,16 +544,15 @@ def _format_permission_detail(tool_name: str, args: dict) -> str:
 # ── Streaming status display ──────────────────────────────────────────────────
 
 class _StreamStatus:
-    """Live status + streamed-text view shown while the model generates.
+    """Phase spinner shown while the model generates.
 
-    Begins as a phase spinner ('Thinking… (3s)'); once visible tokens arrive it
-    streams them live so the user sees output immediately instead of staring at
-    a frozen spinner. The text is tail-capped so the transient Live region never
-    grows past the viewport (which would ghost on clear). The polished Markdown
-    panel is still printed separately once streaming completes.
+    Displays only a rotating phase header ('Thinking… (3s)') for the duration of
+    generation — it deliberately does NOT echo the streamed tokens live (no
+    'typing' effect). The completed reply is rendered once, as a polished panel,
+    by print_kai_message after streaming finishes. self.raw is still accumulated
+    so the phase can read as 'Thinking' while the model is inside a <think> block.
     """
     _PHASES = ["Thinking", "Reasoning", "Deciphering", "Processing"]
-    _MAX_LINES = 14
 
     def __init__(self, label: str = "") -> None:
         self._start = time.monotonic()
@@ -436,34 +571,23 @@ class _StreamStatus:
 
     def _visible(self) -> tuple[str, bool]:
         """Return (text-to-show, still_inside_a_think_block)."""
-        text = re.sub(r'<think>.*?</think>\s*', '', self.raw, flags=re.DOTALL)
-        open_idx = text.rfind('<think>')      # an unclosed (in-progress) think
-        thinking = open_idx != -1
-        if thinking:
-            text = text[:open_idx]
-        return text.strip(), thinking
+        # Still thinking when an opening tag has no matching close after it,
+        # i.e. there are more opens than closes.
+        opens = len(_THINK_OPEN_RE.findall(self.raw))
+        closes = len(_THINK_CLOSE_RE.findall(self.raw))
+        thinking = opens > closes
+        return _strip_reasoning(self.raw), thinking
 
     def __rich__(self) -> Text:
-        visible, thinking = self._visible()
-        if not visible:
-            elapsed = self._elapsed()
-            phase = self._label or (
-                "Thinking" if thinking
-                else self._PHASES[min(elapsed // 6, len(self._PHASES) - 1)]
-            )
-            return self._header(phase)
-
-        lines = visible.splitlines()
-        truncated = len(lines) > self._MAX_LINES
-        if truncated:
-            lines = lines[-self._MAX_LINES:]
-
-        out = self._header(self._label or "Responding")
-        out.append("\n")
-        if truncated:
-            out.append("  …\n", style="kaicode.muted")
-        out.append("\n".join(lines), style="kaicode.msg.kai")
-        return out
+        # Only ever show the phase spinner — never the streamed tokens, so there
+        # is no live 'typing' effect. The final reply prints once, afterward.
+        _, thinking = self._visible()
+        elapsed = self._elapsed()
+        phase = self._label or (
+            "Thinking" if thinking
+            else self._PHASES[min(elapsed // 6, len(self._PHASES) - 1)]
+        )
+        return self._header(phase)
 
 
 # ── Main application ──────────────────────────────────────────────────────────
@@ -526,6 +650,22 @@ class KaiApp:
 
     _MENTION_RE = re.compile(r'(?:^|\s)@([^\s@]+)')
 
+    @staticmethod
+    def _clip(text: str, limit: int, rel_path: str) -> str:
+        """Clip auto-loaded file content to `limit` chars. If the file is longer,
+        append an explicit truncation marker — otherwise the model treats the
+        partial snippet as the whole file and crafts edit_file `old_content` that
+        can never match the real (unseen) text, looping on 'old_content not found'.
+        The marker tells it to read_file for exact contents before editing."""
+        if len(text) <= limit:
+            return text
+        return (
+            text[:limit]
+            + f"\n\n… [TRUNCATED — showing first {limit} of {len(text)} chars of "
+            f"{rel_path}. This is NOT the full file. Call read_file(\"{rel_path}\") "
+            f"to get the exact, complete contents before editing it.]"
+        )
+
     def _expand_mentions(self, text: str) -> list[tuple[str, str]]:
         """Explicit @path mentions → (path, content). User-directed and reliable,
         unlike the fuzzy auto-detect; takes precedence when present."""
@@ -535,7 +675,8 @@ class KaiApp:
             p = (Path(self.cwd) / cand).expanduser()
             try:
                 if p.is_file() and p.stat().st_size < 200_000:
-                    found[cand] = p.read_text("utf-8", errors="replace")[:8000]
+                    found[cand] = self._clip(
+                        p.read_text("utf-8", errors="replace"), 8000, cand)
             except Exception:
                 pass
         return list(found.items())
@@ -555,11 +696,20 @@ class KaiApp:
             r'(?:in|the|function|class|method|def|fix|update|edit|read|check|look at)\s+["\']?([\w_]{3,})["\']?',
             user_input, re.I
         )
+        # Drop common English words — searching the repo for "the"/"this"/"file"
+        # matches almost everything (especially README), which is why unrelated
+        # tasks kept auto-loading README.md. Keep only identifier-looking tokens.
+        sym_refs = [
+            s for s in sym_refs
+            if s.lower() not in _STOPWORD_SYMS
+            and (any(c.isupper() for c in s[1:]) or "_" in s or len(s) >= 6)
+        ]
 
         def _read(rel_path: str) -> str | None:
             p = Path(self.cwd) / rel_path
             if p.is_file() and p.stat().st_size < 200_000:
-                return p.read_text("utf-8", errors="replace")[:MAX_CHARS]
+                return self._clip(
+                    p.read_text("utf-8", errors="replace"), MAX_CHARS, rel_path)
             return None
 
         def _search_and_read(pattern: str, use_regex: bool = False) -> None:
@@ -635,6 +785,9 @@ class KaiApp:
         system_prompt = self._system_prompt()
 
         cancel = _CancelFlag()
+        tools_nudged = False   # have we already pushed the model to actually act?
+        did_act = False        # did ANY tool execute during this turn?
+        last_action_key = None # last state-changing call, to catch stuck loops
 
         for iteration in range(MAX_TOOL_ITERATIONS):
             assistant_content = ""
@@ -739,11 +892,9 @@ class KaiApp:
                 self._tokens_used += tokens
                 self.session.add_tokens(tokens)
 
-            # ── Strip <think> tags from reasoning models ──────────────────
+            # ── Strip chain-of-thought from reasoning models ──────────────
             if assistant_content:
-                assistant_content = re.sub(
-                    r'<think>.*?</think>\s*', '', assistant_content, flags=re.DOTALL
-                ).strip()
+                assistant_content = _strip_reasoning(assistant_content)
 
             # ── Fallback: model emitted tool calls as JSON text, not natively ─
             # Always scan: a model may mix one native call with extra text calls.
@@ -766,9 +917,60 @@ class KaiApp:
                             pending_tool_calls.append(c)
                             seen.add(key)
 
-            # ── No tools requested: plain response, end the turn ────────────
+            # ── No tool calls this turn ─────────────────────────────────────
             if not pending_tool_calls:
                 cancel.stop()
+                # Failure mode (common with small local models): the user asked us
+                # to build/create/fix something, but the model just *described* it
+                # or dumped code in a ``` block and called no tools — so nothing
+                # actually happened. Push it once to use the tools for real.
+                # Crucially, only nudge when NOTHING ran this whole turn: once any
+                # tool has executed, a final text-only message is the model's
+                # legitimate closing summary, not a failure — re-nudging there
+                # makes it redundantly redo (and possibly clobber) finished work.
+                # Did the model TRY to call a tool as JSON text that failed to
+                # parse? (Distinct from "only talked": here it intended to act but
+                # emitted invalid JSON, so it needs a JSON-specific correction.)
+                _all_names = {t["function"]["name"] for t in TOOL_DEFINITIONS}
+                malformed_call = _has_unparsed_tool_call(assistant_content, _all_names)
+
+                if (needs_tools and not tools_nudged
+                        and (malformed_call
+                             or (not did_act
+                                 and _talked_instead_of_acting(user_input, assistant_content)))):
+                    tools_nudged = True
+                    if assistant_content:
+                        print_kai_message(assistant_content)
+                        self.session.messages.append(
+                            Message(role="assistant", content=assistant_content))
+                    if malformed_call:
+                        nudge = (
+                            "Your last message contained a tool call written as JSON "
+                            "text, but it was NOT valid JSON, so it could not be "
+                            "executed and nothing happened. The usual cause is "
+                            "unescaped characters inside a string value — every \" "
+                            "inside a value must be written \\\", every newline \\n, "
+                            "and every backslash \\\\ (this bites when `content`/"
+                            "`new_content` holds code, quotes, or triple-quotes). "
+                            "Re-issue the call NOW. Strongly prefer the native "
+                            "tool-calling format; if you must write JSON, make it "
+                            "strictly valid and put the whole call in ONE object."
+                        )
+                        nudge_note = "Tool call was invalid JSON — asking the model to re-issue it…"
+                    else:
+                        nudge = (
+                            "You described the work but did NOT do it — nothing was "
+                            "actually created or changed. Code written in chat does "
+                            "nothing; the user cannot see or use it. Use the tools NOW "
+                            "to do the real work: call create_file (one call per file, "
+                            "with the COMPLETE content), edit_file, create_directory, "
+                            "and run_command as needed. Do not paste file contents as "
+                            "text — emit the tool calls."
+                        )
+                        nudge_note = "No files were created — telling the model to use its tools…"
+                    self.session.messages.append(Message(role="user", content=nudge))
+                    print_info(nudge_note)
+                    continue
                 if assistant_content:
                     print_kai_message(assistant_content)
                     self.session.messages.append(Message(role="assistant", content=assistant_content))
@@ -793,6 +995,11 @@ class KaiApp:
                 # Short preamble before tool calls — show it, don't block
                 print_kai_message(assistant_content)
 
+            # (Whether the model actually CHANGED anything is decided per tool
+            # below, after each call runs — see `did_act`. A non-readonly call that
+            # ERRORS, is denied, or is a no-op must not count, or the model could
+            # read a file, fail an edit, then summarize and never get nudged.)
+
             # ── Store ONE assistant message holding the text + all tool calls
             tool_calls_payload = [
                 {"id": tc.get("id", ""), "type": "function",
@@ -813,10 +1020,38 @@ class KaiApp:
                 tool_args = tc.get("input", {})
                 tool_id   = tc.get("id", "")
 
-                approved = await self._request_permission(tool_name, tool_args, reason=assistant_content.strip())
+                # ── Stuck-loop guard ────────────────────────────────────────
+                # If the model repeats the EXACT same state-changing call it just
+                # made — with no other action in between — re-running it can't
+                # produce a different result. Don't execute it again; tell the
+                # model so plainly and make it change tack. (edit→run→edit→run is
+                # unaffected: those keys differ, so this only trips true repeats.)
+                action_key = f"{tool_name}:{json.dumps(tool_args, sort_keys=True)}"
+                if tool_name not in _READONLY_TOOLS and action_key == last_action_key:
+                    result = json.dumps({
+                        "error": "Duplicate call — you just ran this exact same "
+                        "operation and nothing changed in between, so the result is "
+                        "identical. Repeating it will not help. Either try a "
+                        "DIFFERENT command/approach, fix the underlying problem "
+                        "first, or stop and report what you found.",
+                    })
+                    print_error("Skipped a repeated identical call (stuck-loop guard)")
+                    self.session.messages.append(Message(
+                        role="tool", content=result,
+                        tool_results=[{"tool_use_id": tool_id, "content": result}],
+                    ))
+                    continue
+
                 is_write = tool_name in ("edit_file", "create_file")
                 target = self._resolve(tool_args.get("path", "")) if is_write else ""
                 before = CheckpointStack.snapshot(target) if is_write else None
+
+                # Show the change (diff / new contents) BEFORE asking to apply it,
+                # so the user reviews what will happen — like KaiCode.
+                if is_write and tool_name not in self._always_allowed:
+                    print_change_preview(tool_name, tool_args, self.cwd)
+
+                approved = await self._request_permission(tool_name, tool_args, reason=assistant_content.strip())
                 if not approved:
                     result = json.dumps({"error": "User denied this action."})
                 else:
@@ -844,11 +1079,29 @@ class KaiApp:
                                 print_error("Syntax check failed — feeding error back to model")
                                 console.print(Text(f"  {verify_err}", style="kaicode.error"))
                                 result = json.dumps({**rdata, "syntax_error": verify_err,
-                                    "note": "File saved but has a syntax error. Fix it now with edit_file."})
+                                    "note": "File saved but has a syntax error (see "
+                                    "syntax_error). Fix it by RE-CREATING the whole file "
+                                    "correctly with create_file (it overwrites). Do NOT "
+                                    "patch it with edit_file/replace_all — that tends to "
+                                    "corrupt the file. Write the complete corrected "
+                                    "content in ONE create_file call."})
                             else:
                                 print_success("Syntax OK")
                     except json.JSONDecodeError:
                         pass
+
+                if tool_name not in _READONLY_TOOLS:
+                    last_action_key = action_key
+                    # "Acted" = a state-changing tool actually ran without erroring.
+                    # A failed edit (old_content not found), a denied call, or the
+                    # duplicate-guard no-op all return an "error" and changed
+                    # nothing — they must NOT suppress the "talked instead of
+                    # acting" nudge. (Non-JSON results are rare; treat as acted.)
+                    try:
+                        if "error" not in json.loads(result):
+                            did_act = True
+                    except (ValueError, TypeError):
+                        did_act = True
 
                 self.session.messages.append(Message(
                     role="tool", content=result,

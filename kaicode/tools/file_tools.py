@@ -44,21 +44,55 @@ def read_file(path: str, start_line: int = 0, end_line: int = 0) -> dict[str, An
         return {"error": str(e)}
 
 
-def edit_file(path: str, old_content: str, new_content: str) -> dict[str, Any]:
-    """Edit a file by replacing old_content with new_content."""
+def edit_file(
+    path: str,
+    old_content: str,
+    new_content: str,
+    replace_all: bool = False,
+) -> dict[str, Any]:
+    """Edit a file by replacing old_content with new_content.
+
+    By default replaces the FIRST occurrence and, if old_content appears more
+    than once, refuses and asks for a more specific match — so an edit meant for
+    one spot never silently rewrites another. Set replace_all=True to replace
+    every occurrence (use this for "rename all" / "change all X to Y" tasks).
+    """
     try:
+        replace_all = str(replace_all).lower() not in ("false", "0", "", "none")
         p = Path(path).expanduser().resolve()
         if not p.exists():
             return {"error": f"File not found: {path}"}
 
         original = p.read_text(encoding="utf-8", errors="replace")
-        if old_content not in original:
+        count = original.count(old_content)
+        if count == 0:
+            return {"error": _no_match_error(original, old_content)}
+        if count > 1 and not replace_all:
+            if count > 10:
+                # A short/common snippet matching many places. Suggesting
+                # replace_all here is dangerous: blanket-replacing it rewrites the
+                # whole file and almost always corrupts it (this is how a stub
+                # exploded to 1300+ duplicated lines). Push the model to add
+                # context instead, NOT to replace_all.
+                return {
+                    "error": (
+                        f"old_content matches {count} places — far too generic. Do NOT "
+                        f"pass replace_all (changing all {count} occurrences would "
+                        f"corrupt the file). Include SEVERAL surrounding lines so "
+                        f"old_content matches exactly ONE location, then edit again."
+                    ),
+                    "occurrences": count,
+                }
             return {
-                "error": "old_content not found in file. "
-                "Make sure to match the exact content including whitespace."
+                "error": (
+                    f"old_content matches {count} places — ambiguous. Either include "
+                    f"more surrounding lines so it matches exactly ONE spot, or pass "
+                    f"replace_all=true to change all {count} occurrences."
+                ),
+                "occurrences": count,
             }
 
-        updated = original.replace(old_content, new_content, 1)
+        updated = original.replace(old_content, new_content, -1 if replace_all else 1)
 
         diff = list(difflib.unified_diff(
             original.splitlines(keepends=True),
@@ -72,12 +106,29 @@ def edit_file(path: str, old_content: str, new_content: str) -> dict[str, Any]:
         return {
             "success": True,
             "path": str(p),
+            "replaced": count if replace_all else 1,
             "diff": "".join(diff),
         }
     except PermissionError:
         return {"error": f"Permission denied: {path}"}
     except Exception as e:
         return {"error": str(e)}
+
+
+def _no_match_error(original: str, old_content: str) -> str:
+    """Build an actionable not-found error, including the closest existing line
+    so the model can correct whitespace/typos instead of guessing blindly."""
+    base = ("old_content not found. Match the file's EXACT text including "
+            "indentation and whitespace. Tip: read_file first, then copy the "
+            "lines verbatim.")
+    first_line = next((l for l in old_content.splitlines() if l.strip()), "")
+    if not first_line:
+        return base
+    file_lines = original.splitlines()
+    match = difflib.get_close_matches(first_line, file_lines, n=1, cutoff=0.6)
+    if match:
+        return f"{base} Closest line in the file is:\n  {match[0]!r}"
+    return base
 
 
 def create_directory(path: str) -> dict[str, Any]:
