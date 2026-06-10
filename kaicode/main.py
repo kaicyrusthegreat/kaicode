@@ -56,6 +56,7 @@ _SLASH_COMMANDS = [
     ("/model",    "Switch model — shows picker if no name given"),
     ("/provider", "Switch provider (ollama/openai/openai/groq)"),
     ("/init",     "Generate a KAICODE.md with project instructions"),
+    ("/commit",   "AI-generated commit message for current changes"),
     ("/undo",     "Revert the last file change the agent made"),
     ("/redo",     "Re-apply the last undone change"),
     ("/changes",  "List file changes made this session"),
@@ -96,15 +97,17 @@ def _make_toolbar(app):
     tricks) so prompt_toolkit manages the geometry cleanly without ghosting.
     """
     def _toolbar():
+        from kaicode.pricing import format_cost
         tok  = f"~{app.tokens_used:,} tok" if app.tokens_used else "0 tok"
         msgs = len(app.session.messages)
+        cost = f"  ·  ~{format_cost(app.cost_estimate)}" if app.cost_estimate > 0 else ""
         return FormattedText([
             # Row 1 — live status
             ("fg:#555555",      "  ◈  "),
             ("fg:#00838f",      f"{app.provider_name}"),
             ("fg:#444444",      " / "),
             ("fg:#e65100 bold", f"{app.model}"),
-            ("fg:#555555",      f"  ·  {tok}  ·  {msgs} msgs  ·  by Kai Cyrus"),
+            ("fg:#555555",      f"  ·  {tok}{cost}  ·  {msgs} msgs  ·  by Kai Cyrus"),
             ("",                "\n"),
             # Row 2 — hints
             ("fg:#666666",      "  ESC"),
@@ -258,6 +261,9 @@ async def handle_command(cmd: str, app) -> None:
     elif command == "/init":
         await _init_project(app, overwrite=(args.strip() == "--force"))
 
+    elif command == "/commit":
+        await app.ai_commit()
+
     elif command in ("/undo", "/u"):
         app.undo()
 
@@ -337,9 +343,17 @@ async def handle_command(cmd: str, app) -> None:
             console.print()
 
     elif command == "/status":
+        from kaicode.pricing import format_cost, LOCAL_PROVIDERS
         tok = f"~{app.tokens_used:,}" if app.tokens_used else "0"
+        if app.provider_name in LOCAL_PROVIDERS:
+            cost = "free (local)"
+        elif app.cost_estimate > 0:
+            cost = f"~{format_cost(app.cost_estimate)} est."
+        else:
+            cost = "n/a"
         console.print()
         print_info(f"Provider: {app.provider_name}  ·  Model: {app.model}  ·  {tok} tokens")
+        print_info(f"Estimated cost this session: {cost}")
         print_info(f"Project: {app.project_info.description}")
         print_info(f"Messages in history: {len(app.session.messages)}")
         console.print()
@@ -456,9 +470,13 @@ async def _pick_model(models: list[str], app) -> None:
 @click.option("--model", "-m", default=None, help="Model name")
 @click.option("--session", "-s", default=None, help="Load a saved session")
 @click.option("--config", "-c", "config_path", default=None, help="Path to config file")
-@click.version_option(version="2.1.0", prog_name="kaicode")
+@click.option("--goal", "-g", default=None,
+              help='Goal mode: work autonomously until tests pass, e.g. --goal "make tests pass"')
+@click.option("--attempts", default=5, show_default=True,
+              help="Max attempts in goal mode")
+@click.version_option(version="2.2.0", prog_name="kaicode")
 @click.argument("prompt", nargs=-1)
-def main(provider, model, session, config_path, prompt):
+def main(provider, model, session, config_path, goal, attempts, prompt):
     """KaiCode — Terminal AI coding assistant.\n\nSupports Ollama, OpenAI, OpenAI, Groq, and any OpenAI-compatible API."""
     create_default_config()
 
@@ -476,7 +494,10 @@ def main(provider, model, session, config_path, prompt):
         app.load_session(session)
 
     async def _run():
-        if prompt:
+        if goal:
+            app.print_header()
+            await app.run_goal(goal, max_attempts=max(1, attempts))
+        elif prompt:
             user_input = " ".join(prompt)
             app.print_header()
             print_user_message(user_input)

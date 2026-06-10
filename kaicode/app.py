@@ -22,6 +22,7 @@ from rich.text import Text
 
 from kaicode.config import KaiConfig
 from kaicode.checkpoint import CheckpointStack
+from kaicode.pricing import estimate_cost
 from kaicode.providers import get_provider, BaseProvider
 from kaicode.providers.base import Message, StreamChunk
 from kaicode.session import Session
@@ -613,6 +614,7 @@ class KaiApp:
         self.tool_registry = ToolRegistry(cwd=self.cwd)
         self.last_diff: str = ""
         self._tokens_used: int = 0
+        self._cost: float = 0.0
         self._always_allowed: set[str] = set()
         self._tools_disabled: bool = False
         self.checkpoints = CheckpointStack()   # undo/redo of agent file changes
@@ -888,9 +890,7 @@ class KaiApp:
                 return
 
             if usage:
-                tokens = usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0)
-                self._tokens_used += tokens
-                self.session.add_tokens(tokens)
+                self._record_usage(usage)
 
             # ── Strip chain-of-thought from reasoning models ──────────────
             if assistant_content:
@@ -1207,6 +1207,7 @@ class KaiApp:
     def clear_history(self) -> None:
         self.session.messages.clear()
         self._tokens_used = 0
+        self._cost = 0.0
         self.last_diff = ""
         print_info("Conversation cleared.")
 
@@ -1254,11 +1255,177 @@ class KaiApp:
             self.provider = get_provider(self.provider_name, self.config)  # old client GC'd
             self.model = self.session.model
             self._tokens_used = self.session.total_tokens
+            self._cost = self.session.total_cost
             print_success(f"Loaded session '{name}' ({len(self.session.messages)} messages)")
             self.print_header()
         except FileNotFoundError:
             print_error(f"Session not found: {name}")
 
+    def _record_usage(self, usage: dict) -> None:
+        p = usage.get("prompt_tokens", 0)
+        c = usage.get("completion_tokens", 0)
+        self._tokens_used += p + c
+        self.session.add_tokens(p + c)
+        cost = estimate_cost(self.provider_name, self.model, p, c)
+        if cost:
+            self._cost += cost
+            self.session.add_cost(cost)
+
     @property
     def tokens_used(self) -> int:
         return self._tokens_used
+
+    @property
+    def cost_estimate(self) -> float:
+        return self._cost
+
+    # ── Goal mode: work → verify with tests → feed failures back → retry ──
+    async def run_goal(self, goal: str, max_attempts: int = 5) -> None:
+        """Autonomous loop toward a stated goal, verified by the test suite.
+
+        Each attempt is one full agentic turn. Afterwards run_tests decides:
+        pass → done; fail → the failure output becomes the next prompt. When
+        no test suite exists, verification is impossible — one attempt runs
+        and the user is told it went unverified."""
+        print_info(f"Goal: {goal}  (max {max_attempts} attempts)")
+        prompt = (
+            f"GOAL: {goal}\n\n"
+            "Work toward this goal using your tools until it is achieved. "
+            "Make the necessary changes, then run the test suite with run_tests "
+            "to verify. If tests fail, fix the failures and run them again. "
+            "Do not stop at describing changes — actually make them."
+        )
+        for attempt in range(1, max_attempts + 1):
+            if attempt > 1:
+                print_info(f"Attempt {attempt}/{max_attempts}")
+            await self.chat(prompt)
+
+            result_raw = await asyncio.to_thread(self.tool_registry.call, "run_tests", {})
+            try:
+                result = json.loads(result_raw)
+            except (ValueError, TypeError):
+                result = {"error": "unreadable test result"}
+
+            if "error" in result:
+                # No test suite (or runner failure) — can't verify automatically.
+                print_info(f"Could not verify goal automatically: {result['error']}")
+                return
+            if result.get("passed"):
+                print_success(f"Goal verified — test suite passed (attempt {attempt}/{max_attempts}).")
+                return
+
+            print_error(f"Tests still failing after attempt {attempt}/{max_attempts}.")
+            if attempt == max_attempts:
+                break
+            output = (result.get("output") or "")[:3000]
+            prompt = (
+                f"The goal is NOT met yet — the test suite still fails. "
+                f"Test command: {result.get('command', '?')}\n\n"
+                f"Failure output:\n{output}\n\n"
+                "Analyze the failures, fix the code with your tools, and run "
+                "run_tests again until everything passes."
+            )
+        print_error(f"Goal not reached within {max_attempts} attempts. "
+                    "Review the test output above or continue interactively.")
+
+    # ── AI commit message ──────────────────────────────────────────────────
+    async def ai_commit(self) -> None:
+        """Generate a conventional commit message from the current diff,
+        confirm with the user, then commit all changes."""
+        status_raw = await asyncio.to_thread(self.tool_registry.call, "git_status", {})
+        try:
+            status = json.loads(status_raw)
+        except (ValueError, TypeError):
+            status = {"error": "unreadable git status"}
+        if "error" in status:
+            print_error(status["error"])
+            return
+        if status.get("clean"):
+            print_info("Nothing to commit — working tree clean.")
+            return
+
+        diff = ""
+        for staged in (True, False):
+            raw = await asyncio.to_thread(
+                self.tool_registry.call, "git_diff", {"staged": staged})
+            try:
+                diff += json.loads(raw).get("diff", "")
+            except (ValueError, TypeError):
+                pass
+        untracked = status.get("untracked", [])
+        if untracked:
+            diff += "\n\nNew (untracked) files:\n" + "\n".join(untracked[:30])
+        if not diff.strip():
+            print_info("No diff content found to describe.")
+            return
+
+        prompt = (
+            "Write a git commit message for the changes below. Use the "
+            "conventional-commit style when it fits (feat:/fix:/refactor:/docs:…). "
+            "First line under 72 characters; add a short body only if the change "
+            "is complex. Respond with ONLY the commit message — no quotes, no "
+            "code fences, no commentary.\n\n"
+            f"{diff[:6000]}"
+        )
+
+        print_info("Generating commit message…")
+        message = ""
+        usage: dict | None = None
+        try:
+            stream = self.provider.stream_chat(
+                messages=[Message(role="user", content=prompt)],
+                model=self.model, system="", tools=None,
+            )
+            async for chunk in stream:
+                if chunk.content:
+                    message += chunk.content
+                if chunk.usage:
+                    usage = chunk.usage
+                if chunk.done:
+                    break
+        except Exception as e:
+            print_error(f"Provider error: {e}")
+            return
+        if usage:
+            self._record_usage(usage)
+
+        message = _strip_reasoning(message).strip().strip("`\"' ")
+        if not message:
+            print_error("Model returned an empty commit message.")
+            return
+
+        console.print()
+        console.print(Panel(Text(message), title="[bold kaicode.assistant] Commit message [/]",
+                            border_style="kaicode.separator", padding=(0, 1)))
+        console.print(Text("  Commit ALL changes with this message? [Y/n/e(dit)]: ",
+                           style="bold kaicode.warning"), end="")
+        try:
+            answer = await asyncio.get_event_loop().run_in_executor(None, input)
+        except (KeyboardInterrupt, EOFError):
+            console.print()
+            return
+        answer = answer.strip().lower()
+        if answer in ("n", "no"):
+            print_info("Commit cancelled.")
+            return
+        if answer in ("e", "edit"):
+            console.print(Text("  Enter commit message: ", style="bold kaicode.assistant"), end="")
+            try:
+                edited = await asyncio.get_event_loop().run_in_executor(None, input)
+            except (KeyboardInterrupt, EOFError):
+                console.print()
+                return
+            if edited.strip():
+                message = edited.strip()
+
+        result_raw = await asyncio.to_thread(
+            self.tool_registry.call, "git_commit",
+            {"message": message, "add_all": True})
+        try:
+            result = json.loads(result_raw)
+        except (ValueError, TypeError):
+            result = {"error": result_raw}
+        if result.get("success"):
+            print_success(result.get("output", "Committed."))
+        else:
+            print_error(str(result.get("error", "Commit failed.")))

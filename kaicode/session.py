@@ -34,6 +34,14 @@ class Session:
         self.metadata["total_tokens"] = self.total_tokens + count
         self.updated_at = time.time()
 
+    @property
+    def total_cost(self) -> float:
+        return self.metadata.get("total_cost", 0.0)
+
+    def add_cost(self, cost: float) -> None:
+        self.metadata["total_cost"] = self.total_cost + cost
+        self.updated_at = time.time()
+
     def save(self, name: str | None = None) -> Path:
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         save_name = name or self.name or f"session_{int(self.created_at)}"
