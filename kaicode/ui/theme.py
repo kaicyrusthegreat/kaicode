@@ -35,16 +35,28 @@ KAICODE_THEME = Theme({
     "kaicode.status_bar":      "default",
     "kaicode.tag":             "bold default on #1976d2",
     # ── Refined message bubbles (transparent — no fill) ───────────────────
-    "kaicode.bubble.kai":      "#9e9e9e",        # KaiCode border  — gray
-    "kaicode.bubble.kai.name": "bold #bdbdbd",   # KaiCode title text
+    # You = blue, KaiCode = brand teal (the logo gradient's two ends), Plan = amber.
+    "kaicode.bubble.kai":      "#00838f",        # KaiCode border  — brand teal
+    "kaicode.bubble.kai.name": "bold #26c6da",   # KaiCode title text
     "kaicode.bubble.user":     "#2196f3",        # You border      — blue
     "kaicode.bubble.user.name":"bold #64b5f6",   # You title text
     "kaicode.bubble.plan":     "#e65100",        # Plan border     — amber
     "kaicode.bubble.plan.name":"bold #ffcc80",   # Plan title text
-    "kaicode.msg.kai":         "#a8a8a8",        # KaiCode body text — gray
+    "kaicode.msg.kai":         "default",        # body inherits terminal fg — readable on dark AND light
     "kaicode.msg.user":        "#90caf9",        # You body text     — blue
     "kaicode.msg.plan":        "#fff3e0",        # Plan body text
 })
+
+# ── prompt_toolkit chrome (REPL prompt + bottom toolbar) ─────────────────────
+# Kept beside the Rich theme so the terminal chrome and the panels share one
+# palette: PT_PROVIDER mirrors kaicode.assistant, PT_MODEL mirrors kaicode.model.
+PT_PROMPT   = "#50fa7b"   # prompt arrow / accents
+PT_TEXT     = "#e8f5e9"   # typed input text
+PT_PROVIDER = "#00838f"   # = kaicode.assistant
+PT_MODEL    = "#e65100"   # = kaicode.model
+PT_MUTED    = "#555555"   # toolbar body text
+PT_HINT     = "#666666"   # toolbar key hints
+PT_SEP      = "#444444"   # toolbar separators
 
 # Vertical blue→teal gradient for the launch logo (one color per glyph row).
 # Interpolated from kaicode.logo (#2196f3) to kaicode.assistant (#00838f).
