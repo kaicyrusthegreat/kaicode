@@ -594,6 +594,7 @@ def print_help() -> None:
         ("/provider [name]", "Switch provider — ollama / openai / openai / groq"),
         ("Project & Code", ""),
         ("/init [--force]",  "Generate a KAICODE.md with project instructions"),
+        ("/commit",          "AI-generated commit message for current changes"),
         ("/diff",            "Show the last applied diff"),
         ("/context",         "Show auto-detected context files"),
         ("/memory",          "Show project memory (use /memory clear to reset)"),
@@ -607,7 +608,7 @@ def print_help() -> None:
         ("/sessions",        "List all saved sessions"),
         ("Conversation", ""),
         ("/clear",           "Clear conversation history"),
-        ("/status",          "Show tokens, model, and provider"),
+        ("/status",          "Show tokens, cost, model, and provider"),
         ("/help",            "Show this help"),
         ("/quit",            "Exit KaiCode"),
     ]
