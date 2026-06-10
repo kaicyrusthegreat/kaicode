@@ -32,19 +32,22 @@ from kaicode.ui.display import (
     print_user_message,
     _MODEL_LABELS,
 )
-from kaicode.ui.theme import KAICODE_THEME
+from kaicode.ui.theme import (
+    KAICODE_THEME,
+    PT_PROMPT, PT_TEXT, PT_PROVIDER, PT_MODEL, PT_MUTED, PT_HINT, PT_SEP,
+)
 from kaicode.session import Session, SESSIONS_DIR
 
 
 HISTORY_FILE = Path.home() / ".kaicode" / "history"
 
 PT_STYLE = PTStyle.from_dict({
-    "prompt":         "fg:#50fa7b bold",
-    "":               "fg:#e8f5e9",
+    "prompt":         f"fg:{PT_PROMPT} bold",
+    "":               f"fg:{PT_TEXT}",
     "bottom-toolbar": "noreverse",
     "completion-menu":                "bg:#1e1e2e fg:#cdd6f4",
     "completion-menu.completion":     "bg:#1e1e2e fg:#cdd6f4",
-    "completion-menu.completion.current": "bg:#45475a fg:#50fa7b bold",
+    "completion-menu.completion.current": f"bg:#45475a fg:{PT_PROMPT} bold",
     "completion-menu.meta":           "fg:#6c7086 italic",
     "completion-menu.meta.current":   "fg:#a6e3a1 italic",
 })
@@ -103,19 +106,19 @@ def _make_toolbar(app):
         cost = f"  ·  ~{format_cost(app.cost_estimate)}" if app.cost_estimate > 0 else ""
         return FormattedText([
             # Row 1 — live status
-            ("fg:#555555",      "  ◈  "),
-            ("fg:#00838f",      f"{app.provider_name}"),
-            ("fg:#444444",      " / "),
-            ("fg:#e65100 bold", f"{app.model}"),
-            ("fg:#555555",      f"  ·  {tok}{cost}  ·  {msgs} msgs  ·  by Kai Cyrus"),
-            ("",                "\n"),
+            (f"fg:{PT_MUTED}",         "  ◈  "),
+            (f"fg:{PT_PROVIDER}",      f"{app.provider_name}"),
+            (f"fg:{PT_SEP}",           " / "),
+            (f"fg:{PT_MODEL} bold",    f"{app.model}"),
+            (f"fg:{PT_MUTED}",         f"  ·  {tok}{cost}  ·  {msgs} msgs  ·  by Kai Cyrus"),
+            ("",                       "\n"),
             # Row 2 — hints
-            ("fg:#666666",      "  ESC"),
-            ("fg:#555555",      " cancel  ·  "),
-            ("fg:#666666",      "/"),
-            ("fg:#555555",      " commands  ·  "),
-            ("fg:#666666",      "Ctrl+C"),
-            ("fg:#555555",      " quit"),
+            (f"fg:{PT_HINT}",          "  ESC"),
+            (f"fg:{PT_MUTED}",         " cancel  ·  "),
+            (f"fg:{PT_HINT}",          "/"),
+            (f"fg:{PT_MUTED}",         " commands  ·  "),
+            (f"fg:{PT_HINT}",          "Ctrl+C"),
+            (f"fg:{PT_MUTED}",         " quit"),
         ])
     return _toolbar
 
@@ -144,7 +147,7 @@ async def run_interactive(app) -> None:
 
     while True:
         try:
-            prompt_fmt = FormattedText([("fg:#50fa7b bold", "›  ")])
+            prompt_fmt = FormattedText([(f"fg:{PT_PROMPT} bold", "›  ")])
             user_input = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: ps.prompt(prompt_fmt, style=PT_STYLE),

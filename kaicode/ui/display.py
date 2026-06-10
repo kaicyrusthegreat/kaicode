@@ -159,6 +159,8 @@ def print_splash() -> None:
 
 
 def print_user_message(content: str) -> None:
+    # Leading blank only — each bubble brings its own gap, so panels are
+    # always separated by exactly one blank line, never two.
     console.print()
     console.print(Panel(
         Text(content, style="kaicode.msg.user"),
@@ -168,7 +170,6 @@ def print_user_message(content: str) -> None:
         border_style="kaicode.bubble.user",
         padding=(0, 2),
     ))
-    console.print()
 
 
 def print_plan(content: str) -> None:
@@ -196,7 +197,6 @@ def print_kai_message(content: str) -> None:
         border_style="kaicode.bubble.kai",
         padding=(1, 2),
     ))
-    console.print()
 
 
 def render_assistant_chunk(chunk: str) -> None:
