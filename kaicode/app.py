@@ -599,7 +599,7 @@ class KaiApp:
         try:
             self.provider: BaseProvider = get_provider(self.provider_name, config)
         except (ImportError, ValueError) as e:
-            # Default provider unavailable (e.g. 'cyrusai' package or Ollama not
+            # Default provider unavailable (e.g. 'cyrusago' package or Ollama not
             # present) — fall back to ollama so kaicode still launches.
             print_info(f"'{self.provider_name}' unavailable ({e}); falling back to ollama.")
             self.provider_name = "ollama"
@@ -624,7 +624,7 @@ class KaiApp:
             "openai": "gpt-4o",
             "groq": "llama-3.1-70b-versatile",
             "openai_compat": "default",
-            "cyrusai": "cyrusai",
+            "cyrusago": "cyrusago",
         }
         return defaults.get(self.provider_name, "default")
 

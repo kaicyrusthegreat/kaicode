@@ -1,12 +1,12 @@
-"""CyrusAI provider — kaicode's window into the self-improving brain.
+"""CyruSagO provider — kaicode's window into the self-improving brain.
 
-Selecting the `cyrusai` model turns every turn into a learning experience:
+Selecting the `cyrusago` model turns every turn into a learning experience:
 
     RECALL  relevant past lessons  -> inject them into the system prompt
     STREAM  the answer from the student model (via Ollama)
     LEARN   (in the background) teacher judges the answer -> reflect -> credit
 
-The student model and memory live in the separate `cyrusai` package; this
+The student model and memory live in the separate `cyrusago` package; this
 provider just wires kaicode's chat loop into it. Streaming itself is delegated
 to the existing OllamaProvider so we don't duplicate transport code.
 """
@@ -20,23 +20,23 @@ from typing import AsyncIterator, Any
 from kaicode.providers.base import BaseProvider, Message, StreamChunk
 from kaicode.providers.ollama import OllamaProvider
 
-from cyrusai import CyrusAI
-from cyrusai import config as cyrus_config
+from cyrusago import CyruSagO
+from cyrusago import config as cyrus_config
 
 
-class CyrusAIProvider(BaseProvider):
-    """Exposes CyrusAI as a single selectable model named ``cyrusai``."""
+class CyruSagOProvider(BaseProvider):
+    """Exposes CyruSagO as a single selectable model named ``cyrusago``."""
 
-    MODEL_NAME = "cyrusai"
+    MODEL_NAME = "cyrusago"
 
     def __init__(self, config) -> None:
         super().__init__(config)
-        # The student model actually generates tokens; defaults to CyrusAI's own.
+        # The student model actually generates tokens; defaults to CyruSagO's own.
         self.student_model = config.extra.get("student_model") or cyrus_config.STUDENT_MODEL
         # Reuse the Ollama transport for streaming (shares pooled HTTP, base_url).
         self._ollama = OllamaProvider(config)
         # One shared brain, guarded by a lock (background learning runs in a thread).
-        self._brain = CyrusAI()
+        self._brain = CyruSagO()
         self._lock = threading.Lock()
 
     # --- helpers -----------------------------------------------------------
@@ -107,7 +107,7 @@ class CyrusAIProvider(BaseProvider):
         return [self.MODEL_NAME]
 
     async def check_connection(self) -> bool:
-        # CyrusAI is reachable iff its underlying Ollama runtime is up.
+        # CyruSagO is reachable iff its underlying Ollama runtime is up.
         return await self._ollama.check_connection()
 
     async def aclose(self) -> None:
