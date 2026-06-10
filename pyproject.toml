@@ -46,8 +46,8 @@ dependencies = [
 kaicode = "kaicode.main:main"
 
 [project.urls]
-Homepage = "https://github.com/kaicyrus/kaicode"
-Repository = "https://github.com/kaicyrus/kaicode"
+Homepage = "https://github.com/kaicyrusdgreat/kaicode"
+Repository = "https://github.com/kaicyrusdgreat/kaicode"
 
 [tool.setuptools.packages.find]
 where = ["."]

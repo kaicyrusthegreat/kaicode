@@ -2,6 +2,8 @@
 
 **Terminal AI coding assistant supporting multiple AI providers.**
 
+*Current version: 2.1.0*
+
 ```
  ██╗  ██╗ █████╗ ██╗ ██████╗ ██████╗ ██████╗ ███████╗
  ██║ ██╔╝██╔══██╗██║██╔════╝██╔═══██╗██╔══██╗██╔════╝
@@ -30,7 +32,7 @@ pip install kaicode
 Or from source:
 
 ```bash
-git clone https://github.com/kaicyrus/kaicode
+git clone https://github.com/kaicyrusdgreat/kaicode
 cd kaicode
 pip install -e .
 ```

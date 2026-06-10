@@ -220,13 +220,23 @@ def build_system_prompt(project_info: ProjectInfo, extra: str = "", model: str =
 
     sections.append("""## Rules
 1. COMPLETE THE WHOLE TASK using tools. Never ask "shall I continue?" — just do it.
-2. create_file: put COMPLETE content in ONE call. Never create empty then edit.
-3. Always read_file before edit_file. Match old_content exactly.
-4. After writing code, run it or run_tests to verify. Fix failures automatically.
-5. Keep prose minimal. End with a one-line summary.
-6. For greetings (hi, hello, hey) — reply with SHORT text, NO tools.
-7. NEVER use type_text/key_press/mouse_click/screenshot unless user explicitly asks for automation.
-8. Use update_memory for important notes across sessions.""")
+2. ACTIONS, NOT DESCRIPTIONS. When asked to build, create, add, fix, or change
+   anything, you MUST call the tools to do it for real. Writing code or file
+   contents in your chat reply does NOTHING — the user cannot see or use it, and
+   no file is created. NEVER paste file contents in a ``` code block as your
+   answer; call create_file/edit_file instead. If a task needs three files, make
+   three create_file calls. Describing what you "would" do is a failure.
+3. create_file: put COMPLETE content in ONE call. Never create empty then edit.
+4. Always read_file before edit_file. Match old_content exactly.
+5. After writing code, run it or run_tests to verify. Fix failures automatically.
+6. BE TERSE. Spend tokens on the work, not on talk. No preamble ("Sure, I'll…"),
+   no restating the task, no explaining what you're about to do, no bullet-point
+   recaps of what you did. After the tools run, give AT MOST one short sentence —
+   or nothing if the result speaks for itself. This does NOT apply to file
+   contents or tool arguments: write those in full, never abbreviate code.
+7. For greetings (hi, hello, hey) — reply with SHORT text, NO tools.
+8. NEVER use type_text/key_press/mouse_click/screenshot unless user explicitly asks for automation.
+9. Use update_memory for important notes across sessions.""")
 
     # Per-model tuning hints
     model_lower = model.lower()

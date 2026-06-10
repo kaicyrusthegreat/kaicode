@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import difflib
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -243,7 +245,10 @@ def print_tool_result(tool_name: str, result: str) -> None:
         return
 
     if tool_name == "edit_file" and "diff" in data:
-        _print_diff(data["diff"])
+        # The full diff was already shown as a pre-approval preview, so here we
+        # only confirm what landed — avoids printing the same diff twice.
+        adds, dels = _diff_stat(data["diff"])
+        console.print(Text(f"  ✓  applied  (+{adds} / -{dels})", style="kaicode.success"))
         return
 
     if tool_name == "read_file" and "content" in data:
@@ -337,7 +342,17 @@ def print_tool_result(tool_name: str, result: str) -> None:
     console.print(Text(f"  ✓  {tool_name} done", style="kaicode.tool_result"))
 
 
-def _print_diff(diff: str) -> None:
+def _diff_stat(diff: str) -> tuple[int, int]:
+    """Count added / removed lines in a unified diff (ignoring file headers)."""
+    adds = sum(1 for ln in diff.splitlines()
+               if ln.startswith("+") and not ln.startswith("+++"))
+    dels = sum(1 for ln in diff.splitlines()
+               if ln.startswith("-") and not ln.startswith("---"))
+    return adds, dels
+
+
+def _print_diff(diff: str, title: str = "diff",
+                border: str = "kaicode.separator") -> None:
     if not diff:
         console.print(Text("  (no changes)", style="kaicode.muted"))
         return
@@ -351,8 +366,132 @@ def _print_diff(diff: str) -> None:
             text.append(line + "\n", style="kaicode.diff.header")
         else:
             text.append(line + "\n", style="kaicode.dir")
-    console.print(Panel(text, title="[kaicode.dir]diff[/]",
-                        border_style="kaicode.separator", padding=(0, 1)))
+    console.print(Panel(text, title=f"[kaicode.dir]{title}[/]",
+                        border_style=border, padding=(0, 1)))
+
+
+# Full-width background tints for the line-by-line diff (KaiCode style).
+_DIFF_ADD_BG = "on #14351f"
+_DIFF_DEL_BG = "on #3a1717"
+
+
+def _diff_width() -> int:
+    try:
+        return min(console.size.width - 2, 140)
+    except Exception:
+        return 100
+
+
+def _emit_diff_line(out: Text, lineno: str, marker: str, content: str,
+                    bg: str, marker_style: str, width: int) -> None:
+    """Append one diff row with a full-width background tint."""
+    out.append(f"{lineno:>5} ", style=f"{bg} kaicode.muted")
+    out.append(marker, style=f"{bg} {marker_style}")
+    out.append(content, style=bg)
+    pad = width - (6 + len(marker) + len(content))
+    if pad > 0:
+        out.append(" " * pad, style=bg)
+    out.append("\n")
+
+
+def _render_diff_body(diff: str) -> Text:
+    """Render a unified diff with line numbers and red/green row backgrounds."""
+    width = _diff_width()
+    out = Text()
+    old_ln = new_ln = 0
+    for raw in diff.splitlines():
+        if raw.startswith(("+++", "---")):
+            continue
+        if raw.startswith("@@"):
+            m = re.search(r"-(\d+)(?:,\d+)? \+(\d+)", raw)
+            if m:
+                old_ln, new_ln = int(m.group(1)), int(m.group(2))
+            if out.plain:                      # blank gap between hunks
+                out.append("\n")
+            continue
+        if raw.startswith("+"):
+            _emit_diff_line(out, str(new_ln), "+ ", raw[1:],
+                            _DIFF_ADD_BG, "bold green", width)
+            new_ln += 1
+        elif raw.startswith("-"):
+            _emit_diff_line(out, str(old_ln), "- ", raw[1:],
+                            _DIFF_DEL_BG, "bold red", width)
+            old_ln += 1
+        else:
+            content = raw[1:] if raw.startswith(" ") else raw
+            out.append(f"{new_ln:>5} ", style="kaicode.muted")
+            out.append("  ", style="kaicode.muted")
+            out.append(content + "\n", style="kaicode.dir")
+            old_ln += 1
+            new_ln += 1
+    return out
+
+
+def _print_change_header(verb: str, path: str, adds: int, dels: int) -> None:
+    head = Text()
+    head.append(verb, style="bold kaicode.assistant")
+    head.append(f"({path})", style="kaicode.dir")
+    console.print()
+    console.print(head)
+
+    parts: list[str] = []
+    if adds:
+        parts.append(f"Added {adds} line" + ("s" if adds != 1 else ""))
+    if dels:
+        parts.append(f"removed {dels} line" + ("s" if dels != 1 else ""))
+    summary = Text("  ⎿ ", style="kaicode.muted")
+    summary.append(", ".join(parts) if parts else "no changes", style="kaicode.muted")
+    console.print(summary)
+
+
+def print_change_preview(tool_name: str, args: dict, cwd: str) -> bool:
+    """Show what a write tool *would* do, before the permission prompt — the diff
+    for an edit, or the new contents for a create. Mirrors KaiCode's
+    review-before-apply flow. Returns True if a preview was rendered."""
+    if tool_name == "edit_file":
+        path = args.get("path", "")
+        old  = args.get("old_content", "")
+        new  = args.get("new_content", "")
+        p = (Path(cwd) / path).expanduser()
+        try:
+            original = p.read_text("utf-8", errors="replace")
+        except Exception:
+            return False  # file unreadable — permission panel still shown
+        if old and old not in original:
+            console.print(Text(
+                f"  !  old_content not found in {path} — this edit will fail",
+                style="kaicode.warning"))
+            return False
+        updated = original.replace(old, new, 1)
+        diff = "".join(difflib.unified_diff(
+            original.splitlines(keepends=True),
+            updated.splitlines(keepends=True),
+            fromfile=f"a/{p.name}", tofile=f"b/{p.name}", n=3,
+        ))
+        adds, dels = _diff_stat(diff)
+        _print_change_header("Update", path, adds, dels)
+        console.print(_render_diff_body(diff))
+        return True
+
+    if tool_name == "create_file":
+        path    = args.get("path", "")
+        content = args.get("content", "")
+        lines   = content.splitlines()
+        exists  = (Path(cwd) / path).expanduser().exists()
+        _print_change_header("Overwrite" if exists else "Create",
+                             path, len(lines), 0)
+        width = _diff_width()
+        out = Text()
+        for i, line in enumerate(lines[:200], 1):
+            _emit_diff_line(out, str(i), "+ ", line,
+                            _DIFF_ADD_BG, "bold green", width)
+        if len(lines) > 200:
+            out.append(f"      … {len(lines) - 200} more lines\n",
+                       style="kaicode.muted")
+        console.print(out)
+        return True
+
+    return False
 
 
 def _print_file_tree(data: dict) -> None:
