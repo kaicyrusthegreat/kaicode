@@ -30,14 +30,16 @@ def get_provider(name: str, config) -> BaseProvider:
         "openai_compat": OpenAICompatProvider,
     }
 
-    if name == "cyrusai":
+    if name == "cyrusai":  # legacy alias from before the CyruSagO rename
+        name = "cyrusago"
+    if name == "cyrusago":
         try:
-            from kaicode.providers.cyrusai import CyrusAIProvider
-            providers["cyrusai"] = CyrusAIProvider
+            from kaicode.providers.cyrusago import CyruSagOProvider
+            providers["cyrusago"] = CyruSagOProvider
         except ImportError:
             raise ImportError(
-                "The 'cyrusai' package is required for the CyrusAI provider. "
-                "Install it with: pip install cyrusai"
+                "The 'cyrusago' package is required for the CyruSagO provider. "
+                "Install it with: pip install cyrusago"
             )
 
     if name not in providers:
