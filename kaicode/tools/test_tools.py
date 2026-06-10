@@ -55,10 +55,14 @@ def run_tests(
 
 
 def _detect_test_command(root: Path) -> str:
+    # `python -m pytest` uses whatever pytest is on the active interpreter
+    # (e.g. the project's venv), which is more reliable than a bare `pytest`
+    # that may resolve to a different environment or not be on PATH.
+    pytest_cmd = f"{_python()} -m pytest --tb=short -q"
     checks = [
-        (["pytest.ini", "conftest.py"],                          "pytest --tb=short -q"),
-        (["pyproject.toml"],                                     "pytest --tb=short -q"),
-        (["setup.py", "tests"],                                  "pytest --tb=short -q"),
+        (["pytest.ini", "conftest.py"],                          pytest_cmd),
+        (["pyproject.toml"],                                     pytest_cmd),
+        (["setup.py", "tests"],                                  pytest_cmd),
         (["pubspec.yaml"],                                       "flutter test"),
         (["go.mod"],                                             "go test ./..."),
         (["Cargo.toml"],                                         "cargo test"),
@@ -72,4 +76,30 @@ def _detect_test_command(root: Path) -> str:
     for markers, cmd in checks:
         if any((root / m).exists() for m in markers):
             return cmd
+    # No project marker — but bare pytest-style files are enough to run pytest.
+    # This is the common "just wrote calculator.py + test_calculator.py" case.
+    if _has_pytest_files(root):
+        return pytest_cmd
     return ""
+
+
+def _python() -> str:
+    import sys
+    return sys.executable or "python3"
+
+
+def _has_pytest_files(root: Path) -> bool:
+    """True if the tree contains any test_*.py / *_test.py file (capped scan)."""
+    seen = 0
+    for p in root.rglob("*.py"):
+        # Skip virtualenvs / caches so we don't match library test files.
+        parts = set(p.parts)
+        if parts & {".venv", "venv", "site-packages", "__pycache__", ".tox", "node_modules"}:
+            continue
+        name = p.name
+        if name.startswith("test_") or name.endswith("_test.py"):
+            return True
+        seen += 1
+        if seen > 2000:
+            break
+    return False

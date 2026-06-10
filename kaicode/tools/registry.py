@@ -38,13 +38,14 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "edit_file",
-            "description": "Edit a file by replacing exact text content. The old_content must match exactly.",
+            "description": "Edit a file by replacing exact text content. old_content must match the file's text exactly (including whitespace) and uniquely. To change every occurrence (e.g. rename a variable, change all 'TODO' to 'DONE'), set replace_all=true.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "File path to edit"},
                     "old_content": {"type": "string", "description": "Exact text to replace (must match exactly)"},
                     "new_content": {"type": "string", "description": "New text to put in place of old_content"},
+                    "replace_all": {"type": "boolean", "description": "Replace ALL occurrences instead of just the first (default: false)"},
                 },
                 "required": ["path", "old_content", "new_content"],
             },

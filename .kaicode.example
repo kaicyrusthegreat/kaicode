@@ -5,3 +5,18 @@
 # system_prompt: "This is a Flutter app using Riverpod for state management."
 # max_context_files: 15
 # auto_detect_project: true
+
+# ── Speed / token tuning (Ollama) ─────────────────────────────────────────────
+# Make local models faster and cheaper. All optional; omit to use Ollama's
+# defaults. KaiCode already keeps replies terse — these push it further.
+# providers:
+#   ollama:
+#     default_model: qwen2.5-coder:7b
+#     num_predict: 1024     # cap tokens GENERATED per reply. Faster/cheaper, but
+#                           # too low truncates long files — keep >= 1024 for code.
+#     num_ctx: 8192         # context window. Smaller = faster prompt processing,
+#                           # but trims older messages/auto-loaded files.
+#     temperature: 0.2      # lower = more focused, less rambling
+#     keep_alive: 30m       # how long to keep the model resident in RAM
+#     think: false          # qwen3 / deepseek-r1 only: skip the slow reasoning
+#                           # phase (this is already the default — set true to keep it)
