@@ -61,6 +61,8 @@ _STOPWORD_SYMS = {
     "errors", "output", "confirm", "contents", "content", "command", "commands",
     "afterward", "argument", "arguments", "example", "examples", "exactly",
     "number", "numbers", "string", "values", "create", "created", "inside",
+    "problem", "problems", "question", "questions", "answer", "answers",
+    "reason", "reasons", "solution", "solutions",
 }
 
 # ── Tool selection ────────────────────────────────────────────────────────────
@@ -390,6 +392,18 @@ _EXPLAIN_REQUEST = re.compile(
 )
 
 
+def _looks_like_question(msg: str) -> bool:
+    """Question-shaped: a known starter word, OR a trailing "?" with no action
+    verb ("can you tell me…?" — _EXPLAIN_REQUEST is a fixed starter list and
+    can't enumerate every phrasing). Gates ONLY auto-load and the act-nudge,
+    NEVER tool availability: a question may still need read_file/repo_map, the
+    model just fetches files itself instead of having them spliced in."""
+    msg = msg.strip()
+    if _EXPLAIN_REQUEST.match(msg):
+        return True
+    return msg.rstrip().endswith("?") and not _ACTION_REQUEST.search(msg)
+
+
 def _talked_instead_of_acting(user_input: str, content: str) -> bool:
     """True when the user asked for real work but the model replied with prose
     (often a ``` code block) and made NO tool calls — so nothing happened.
@@ -402,7 +416,7 @@ def _talked_instead_of_acting(user_input: str, content: str) -> bool:
     single extra nudge — far cheaper than silently doing nothing."""
     if not content.strip():
         return False
-    if _EXPLAIN_REQUEST.match(user_input.strip()):
+    if _looks_like_question(user_input):
         return False
     return bool(_ACTION_REQUEST.search(user_input)) or _needs_tools(user_input)
 
@@ -762,7 +776,11 @@ class KaiApp:
         mentions = self._expand_mentions(user_input)
         if mentions:
             relevant = mentions
-        elif needs_tools:
+        elif needs_tools and not _looks_like_question(user_input):
+            # Questions never get fuzzy auto-load (no length cap here, unlike
+            # _needs_tools): the model can read_file/repo_map itself, and tool
+            # results arrive on the tool role — content spliced into the user
+            # message instead gets misattributed as user-pasted.
             try:
                 relevant = await asyncio.wait_for(
                     asyncio.to_thread(self._find_relevant_files, user_input),
@@ -777,7 +795,14 @@ class KaiApp:
             names = ", ".join(p for p, _ in relevant)
             print_info(f"Auto-loaded: {names}")
             ctx = "\n\n".join(f"<file path=\"{p}\">\n{c}\n</file>" for p, c in relevant)
-            augmented = f"{user_input}\n\n<auto_context>\n{ctx}\n</auto_context>"
+            augmented = (
+                f"{user_input}\n\n"
+                '<auto_context note="These files were attached automatically by '
+                "KaiCode's relevance search. The user did NOT paste or provide "
+                'them, and they may be truncated — call read_file for complete '
+                'contents.">\n'
+                f"{ctx}\n</auto_context>"
+            )
         else:
             augmented = user_input
 

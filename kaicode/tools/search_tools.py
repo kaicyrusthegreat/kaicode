@@ -37,6 +37,9 @@ def search_files(
         SKIP_DIRS = {
             ".git", "__pycache__", "node_modules", ".venv", "venv",
             "dist", "build", ".eggs",
+            # Vendored / generated trees — searching them surfaces dependency
+            # source (e.g. ios/Pods/**.h) as if it were project code.
+            "Pods", "Carthage", "DerivedData", "vendor", "target", "coverage",
         }
         SKIP_EXTENSIONS = {
             ".pyc", ".pyo", ".class", ".o", ".so", ".dylib",
