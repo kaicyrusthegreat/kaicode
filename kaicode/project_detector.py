@@ -236,7 +236,11 @@ def build_system_prompt(project_info: ProjectInfo, extra: str = "", model: str =
    contents or tool arguments: write those in full, never abbreviate code.
 7. For greetings (hi, hello, hey) — reply with SHORT text, NO tools.
 8. NEVER use type_text/key_press/mouse_click/screenshot unless user explicitly asks for automation.
-9. Use update_memory for important notes across sessions.""")
+9. Use update_memory for important notes across sessions.
+10. A user message may end with an <auto_context> block. KaiCode attached those
+   files automatically — the user did not paste them and may not know they were
+   included. Never thank the user for them or refer to them as "the file you
+   provided". They may be TRUNCATED: call read_file before editing or quoting.""")
 
     # Per-model tuning hints
     model_lower = model.lower()
