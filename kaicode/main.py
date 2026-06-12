@@ -488,6 +488,7 @@ async def handle_command(cmd: str, app) -> None:
 
     elif command == "/brain":
         from kaicode.brain import build_project_brain
+
         build_project_brain(app.cwd)
 
     elif command == "/model":
@@ -510,9 +511,7 @@ async def handle_command(cmd: str, app) -> None:
             except ValueError as e:
                 print_error(str(e))
         else:
-            print_info(
-                "Available providers: ollama, openai, groq, openai_compat, cyrusago"
-            )
+            print_info("Available providers: ollama, openai, groq, openai_compat, cyrusago")
             print_info(f"Current: {app.provider_name}")
             print_info("Use: /provider <name> [model]")
 
@@ -611,6 +610,7 @@ async def handle_command(cmd: str, app) -> None:
     elif command == "/panel":
         if args:
             from kaicode.team import run_panel
+
             await run_panel(args, app.config, app.config.panel)
         else:
             print_info("Use: /panel <prompt>")
@@ -618,6 +618,7 @@ async def handle_command(cmd: str, app) -> None:
     elif command == "/consensus":
         if args:
             from kaicode.team import run_consensus
+
             await run_consensus(args, app.config, app.provider_name, app.model, app.config.panel)
         else:
             print_info("Use: /consensus <prompt>")
@@ -625,6 +626,7 @@ async def handle_command(cmd: str, app) -> None:
     elif command == "/vote":
         if args:
             from kaicode.team import run_vote
+
             await run_vote(args, app.config, app.provider_name, app.model, app.config.panel)
         else:
             print_info("Use: /vote <prompt>")

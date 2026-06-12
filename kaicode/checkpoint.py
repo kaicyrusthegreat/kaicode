@@ -99,13 +99,13 @@ class CheckpointStack:
         """Revert changes back to a named snapshot. Returns number of changes reverted."""
         if name not in self._snapshots:
             raise ValueError(f"Snapshot '{name}' not found.")
-        
+
         target_state = self._snapshots[name]
         reverted_count = 0
-        
+
         # Keep undoing until our undo stack matches the target state
         while len(self._undo) > len(target_state):
             self.undo()
             reverted_count += 1
-            
+
         return reverted_count
