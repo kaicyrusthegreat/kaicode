@@ -646,6 +646,7 @@ def print_help() -> None:
         ("Project & Code", ""),
         ("/init [--force]", "Generate a KAICODE.md with project instructions"),
         ("/commit", "AI-generated commit message for current changes"),
+        ("/verify [cmd]", "Run the detected test suite or a custom command"),
         ("/diff", "Show the last applied diff"),
         ("/context", "Show auto-detected context files"),
         ("/memory", "Show project memory (use /memory clear to reset)"),

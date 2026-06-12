@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -93,6 +94,26 @@ class SessionStorageTests(unittest.TestCase):
                 sessions = Session.list_sessions()
 
             self.assertEqual([s["name"] for s in sessions], ["ok"])
+
+    def test_latest_can_be_scoped_to_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sessions_dir = Path(tmp) / "sessions"
+            cwd_a = Path(tmp) / "a"
+            cwd_b = Path(tmp) / "b"
+            cwd_a.mkdir()
+            cwd_b.mkdir()
+            older = Session(name="", provider="ollama", model="qwen3:8b", cwd=str(cwd_a))
+            newer = Session(name="", provider="ollama", model="qwen3:8b", cwd=str(cwd_b))
+
+            with patch("kaicode.session.SESSIONS_DIR", sessions_dir):
+                older.save("older")
+                time.sleep(0.01)
+                newer.save("newer")
+                latest_for_a = Session.latest(str(cwd_a))
+                latest_any = Session.latest()
+
+            self.assertEqual(latest_for_a, "older")
+            self.assertEqual(latest_any, "newer")
 
 
 if __name__ == "__main__":

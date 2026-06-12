@@ -27,6 +27,19 @@ class ConfigTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "expected a YAML mapping"):
                     KaiConfig()._load_global()
 
+    def test_load_accepts_explicit_config_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_file = Path(tmp) / "custom.yaml"
+            config_file.write_text(
+                "default_provider: ollama\nproviders:\n  ollama:\n    default_model: qwen3:4b\n",
+                encoding="utf-8",
+            )
+
+            config = KaiConfig.load(config_file)
+
+            self.assertEqual(config.default_provider, "ollama")
+            self.assertEqual(config.get_provider("ollama").default_model, "qwen3:4b")
+
 
 if __name__ == "__main__":
     unittest.main()

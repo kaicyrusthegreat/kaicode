@@ -141,6 +141,7 @@ class Session:
                         "name": data.get("name", path.stem),
                         "provider": data.get("provider", "?"),
                         "model": data.get("model", "?"),
+                        "cwd": data.get("cwd", ""),
                         "messages": len(data.get("messages", [])),
                         "updated_at": data.get("updated_at", 0),
                     }
@@ -148,3 +149,22 @@ class Session:
             except (json.JSONDecodeError, KeyError):
                 pass
         return sessions
+
+    @classmethod
+    def latest(cls, cwd: str | None = None) -> str | None:
+        """Return the newest session name, optionally scoped to a project cwd."""
+        target = Path(cwd).expanduser().resolve() if cwd else None
+        for session in cls.list_sessions():
+            if target is not None:
+                raw_cwd = session.get("cwd")
+                if not raw_cwd:
+                    continue
+                try:
+                    if Path(raw_cwd).expanduser().resolve() != target:
+                        continue
+                except OSError:
+                    continue
+            name = session.get("name")
+            if name:
+                return name
+        return None

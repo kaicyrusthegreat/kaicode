@@ -35,9 +35,13 @@ class KaiConfig:
     system_prompt: str = ""
 
     @classmethod
-    def load(cls) -> "KaiConfig":
+    def load(cls, path: str | Path | None = None) -> "KaiConfig":
         config = cls()
-        config._load_global()
+        if path:
+            data = _read_yaml_config(Path(path).expanduser(), "config")
+            config._apply_dict(data)
+        else:
+            config._load_global()
         config._load_project()
         config._apply_env()
         return config

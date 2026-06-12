@@ -792,7 +792,14 @@ class _StreamStatus:
 
 class KaiApp:
     def __init__(
-        self, config: KaiConfig, provider_name: str | None = None, model: str | None = None
+        self,
+        config: KaiConfig,
+        provider_name: str | None = None,
+        model: str | None = None,
+        extra_workspace_roots: list[str] | None = None,
+        allowed_tools: set[str] | None = None,
+        disallowed_tools: set[str] | None = None,
+        permission_mode: str = "default",
     ) -> None:
         self.config = config
         self.provider_name = provider_name or config.default_provider
@@ -808,6 +815,9 @@ class KaiApp:
             model or config.get_provider(self.provider_name).default_model or self._default_model()
         )
         self.cwd = os.getcwd()
+        self._extra_workspace_roots = extra_workspace_roots
+        self._allowed_tools = allowed_tools
+        self._disallowed_tools = disallowed_tools
         self.session = Session(
             name="",
             provider=self.provider_name,
@@ -815,7 +825,13 @@ class KaiApp:
             cwd=self.cwd,
         )
         self.project_info = detect_project(self.cwd)
-        self.tool_registry = ToolRegistry(cwd=self.cwd)
+        self.tool_registry = ToolRegistry(
+            cwd=self.cwd,
+            extra_roots=self._extra_workspace_roots,
+            allowed_tools=self._allowed_tools,
+            disallowed_tools=self._disallowed_tools,
+        )
+        self.permission_mode = permission_mode
         self.last_diff: str = ""
         self._tokens_used: int = 0
         self._cost: float = 0.0
@@ -953,12 +969,13 @@ class KaiApp:
 
         return list(found.items())
 
-    async def chat(self, user_input: str) -> None:
+    async def chat(self, user_input: str) -> str | None:
         """Process one user turn through the agentic loop."""
         # Compute intent / tool selection ONCE — user_input is constant for the
         # whole turn, so there's no reason to recompute these every iteration.
         needs_tools = _needs_tools(user_input)
         base_tools = _select_tools(user_input) if needs_tools else None
+        base_tools = self.tool_registry.filter_tool_definitions(base_tools)
 
         # ── Build context ──────────────────────────────────────────────────
         # Explicit @path mentions win — they're precise and user-directed. Only
@@ -1087,7 +1104,7 @@ class KaiApp:
                             print_error(f"Model not found. Switching to: {self.model}")
                             self.print_header()
                             self.session.messages.pop()
-                            await self.chat(user_input)
+                            return await self.chat(user_input)
                         else:
                             print_error("No Ollama models installed. Run: ollama pull llama3.2")
                         return
@@ -1129,8 +1146,9 @@ class KaiApp:
                 if active_tools:
                     valid = {t["function"]["name"] for t in active_tools}
                 else:
-                    # Tools-disabled mode: accept any known tool name
-                    valid = {t["function"]["name"] for t in TOOL_DEFINITIONS}
+                    # Tools-disabled mode: accept any known tool name allowed by policy.
+                    policy_tools = self.tool_registry.filter_tool_definitions(TOOL_DEFINITIONS)
+                    valid = {t["function"]["name"] for t in policy_tools or []}
                 cleaned, text_calls = _extract_text_tool_calls(assistant_content, valid)
                 if text_calls:
                     assistant_content = cleaned
@@ -1211,7 +1229,8 @@ class KaiApp:
                     self.session.messages.append(
                         Message(role="assistant", content=assistant_content)
                     )
-                break
+                    return assistant_content
+                return None
 
             # ── Plan detection: only interrupt for real numbered plans ──────
             if assistant_content and iteration == 0 and _is_real_plan(assistant_content):
@@ -1401,6 +1420,17 @@ class KaiApp:
     async def _request_permission(self, tool_name: str, tool_args: dict, reason: str = "") -> bool:
         if tool_name in _AUTO_APPROVE_TOOLS or tool_name in self._always_allowed:
             return True
+        if self.permission_mode == "bypassPermissions":
+            return True
+        if self.permission_mode == "acceptEdits" and tool_name in {
+            "edit_file",
+            "create_file",
+            "create_directory",
+        }:
+            return True
+        if self.permission_mode == "dontAsk":
+            print_error(f"Blocked by --permission-mode=dontAsk: {tool_name}")
+            return False
 
         label = _TOOL_ACTION_LABELS.get(tool_name, tool_name)
         detail = _format_permission_detail(tool_name, tool_args)
@@ -1529,20 +1559,31 @@ class KaiApp:
     def save_session(self, name: str | None = None) -> None:
         print_success(f"Session saved: {self.session.save(name)}")
 
-    def load_session(self, name: str) -> None:
+    def load_session(self, name: str) -> bool:
         try:
             self.session = Session.load(name)
+            self.cwd = self.session.cwd
             self.provider_name = self.session.provider
             self.provider = get_provider(self.provider_name, self.config)  # old client GC'd
             self.model = self.session.model
+            self.project_info = detect_project(self.cwd)
+            self.tool_registry = ToolRegistry(
+                cwd=self.cwd,
+                extra_roots=self._extra_workspace_roots,
+                allowed_tools=self._allowed_tools,
+                disallowed_tools=self._disallowed_tools,
+            )
             self._tokens_used = self.session.total_tokens
             self._cost = self.session.total_cost
             print_success(f"Loaded session '{name}' ({len(self.session.messages)} messages)")
             self.print_header()
+            return True
         except FileNotFoundError:
             print_error(f"Session not found: {name}")
+            return False
         except ValueError as e:
             print_error(str(e))
+            return False
 
     def _record_usage(self, usage: dict) -> None:
         p = usage.get("prompt_tokens", 0)

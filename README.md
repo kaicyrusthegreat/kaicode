@@ -27,6 +27,7 @@
 
 - **Multiple AI providers**: Ollama (local), OpenAI AI, OpenAI, Groq, any OpenAI-compatible API, and CyruSagO (experimental self-improving core)
 - **Goal mode** *(new in 3.0)*: `kaicode --goal "make tests pass"` — works autonomously, runs the test suite, feeds failures back, and retries until green
+- **Scriptable one-shot mode** *(new in 3.0)*: `kaicode --print --output-format json "summarize this repo"` for pipes, automation, and CI helpers
 - **AI commit messages** *(new in 3.0)*: `/commit` generates a conventional-commit message from your diff and commits after approval
 - **Token & cost tracking** *(new in 3.0)*: live token count and estimated API cost in the status bar and `/status` (local models are free)
 - **Agentic tools**: ~20 tools — file editing with diff previews, code search, AST symbol lookup, repo map, shell commands, git, test runner, web search/fetch, GUI automation
@@ -36,6 +37,7 @@
 - **Project memory**: the agent saves notes per project (`/memory`); `/init` scaffolds a `KAICODE.md` instructions file
 - **Smart context**: auto-detects project type (Flutter, Python, Node, Rust, Go, and more), auto-loads relevant files, supports explicit `@path` mentions
 - **Syntax verification**: every saved file is syntax-checked and errors are fed back to the model automatically
+- **Verification command**: `/verify` and `--verify` run the detected test suite on demand
 - **Session management**: save and resume conversations
 - **Project config**: per-project `.kaicode` override file
 
@@ -89,6 +91,8 @@ GROQ_API_KEY=gsk_... kaicode --provider groq
 
 # One-shot mode
 kaicode "explain this codebase"
+kaicode --print "write a changelog summary"
+git diff | kaicode --print --output-format json "review this diff"
 
 # Goal mode — iterate autonomously until the test suite passes
 kaicode --goal "make tests pass"
@@ -96,6 +100,13 @@ kaicode --goal "fix the failing login tests" --attempts 8
 
 # Load a saved session
 kaicode --session mysession
+kaicode --continue
+kaicode --resume mysession --name followup
+
+# Restrict tools and workspace access
+kaicode --safe-mode "audit this project"
+kaicode --add-dir ../shared --allowed-tools Read,Grep,Edit "update shared docs"
+kaicode --disallowed-tools Bash --permission-mode dontAsk "review the code"
 ```
 
 ## Configuration
@@ -151,6 +162,7 @@ system_prompt: "This is a Flutter app using Riverpod for state management."
 | `/provider [name]` | Switch provider |
 | `/init [--force]` | Generate a `KAICODE.md` with project instructions |
 | `/commit` | AI-generated commit message for current changes |
+| `/verify [cmd]` | Run the detected test suite or a custom command |
 | `/undo` | Revert the last file change the agent made |
 | `/redo` | Re-apply the last undone change |
 | `/changes` | List file changes made this session |
@@ -166,6 +178,32 @@ system_prompt: "This is a Flutter app using Riverpod for state management."
 | `/quit` | Exit |
 
 **Tips:** `@path/to/file` includes a specific file as context · `!command` runs a shell command inline · `ESC` cancels generation.
+
+## CLI Automation
+
+KaiCode supports scriptable usage inspired by modern terminal coding agents:
+
+```bash
+# Plain stdout, suitable for pipes
+kaicode --print "summarize the release blockers"
+
+# Machine-readable result
+kaicode --print --output-format json "list risks in this diff"
+
+# Resume the newest session in the current directory
+kaicode --continue "pick up where we left off"
+
+# Use a custom config and append extra instructions
+kaicode --config ./team.kaicode.yaml \
+  --append-system-prompt "Prefer small, reviewable diffs." \
+  "refactor the parser"
+
+# Run tests after a one-shot request
+kaicode --verify "fix the failing tests"
+```
+
+Tool policy options accept both KaiCode tool names and common AI-style
+aliases such as `Read`, `Edit`, `Write`, `Bash`, `Grep`, and `WebFetch`.
 
 ## Troubleshooting
 
