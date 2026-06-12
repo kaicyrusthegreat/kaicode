@@ -423,9 +423,22 @@ TOOL_DEFINITIONS = [
 class ToolRegistry:
     """Maps tool names to their implementations."""
 
-    def __init__(self, cwd: str = ".") -> None:
+    def __init__(
+        self,
+        cwd: str = ".",
+        extra_roots: list[str] | None = None,
+        allowed_tools: set[str] | None = None,
+        disallowed_tools: set[str] | None = None,
+    ) -> None:
         self.cwd = cwd
         self.root = Path(cwd).expanduser().resolve()
+        self.roots = [self.root]
+        for raw in extra_roots or []:
+            root = Path(raw).expanduser().resolve()
+            if root not in self.roots:
+                self.roots.append(root)
+        self.allowed_tools = allowed_tools
+        self.disallowed_tools = disallowed_tools or set()
         self._tools: dict[str, Callable] = {
             "read_file": self._read_file,
             "edit_file": self._edit_file,
@@ -449,14 +462,33 @@ class ToolRegistry:
             "screenshot": self._screenshot,
         }
 
+    def is_tool_allowed(self, name: str) -> bool:
+        if self.allowed_tools is not None and name not in self.allowed_tools:
+            return False
+        return name not in self.disallowed_tools
+
+    def filter_tool_definitions(self, tools: list[dict] | None) -> list[dict] | None:
+        if tools is None:
+            return None
+        return [
+            tool for tool in tools if self.is_tool_allowed(tool.get("function", {}).get("name", ""))
+        ]
+
+    def _is_within_workspace(self, path: Path) -> bool:
+        for root in self.roots:
+            try:
+                path.relative_to(root)
+                return True
+            except ValueError:
+                continue
+        return False
+
     def _resolve_workspace_path(self, raw_path: str | Path | None) -> Path | dict[str, str]:
         candidate = Path(str(raw_path or ".")).expanduser()
         if not candidate.is_absolute():
             candidate = self.root / candidate
         resolved = candidate.resolve(strict=False)
-        try:
-            resolved.relative_to(self.root)
-        except ValueError:
+        if not self._is_within_workspace(resolved):
             return {"error": "Path is outside the project workspace."}
         return resolved
 
@@ -572,6 +604,8 @@ class ToolRegistry:
     def call(self, name: str, arguments: dict[str, Any]) -> str:
         if name not in self._tools:
             return json.dumps({"error": f"Unknown tool: {name}"})
+        if not self.is_tool_allowed(name):
+            return json.dumps({"error": f"Tool is disabled by current policy: {name}"})
         arguments = self._normalize_args(name, arguments)
         try:
             result = self._tools[name](**arguments)

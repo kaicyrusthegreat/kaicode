@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -62,6 +65,142 @@ PT_STYLE = PTStyle.from_dict(
 )
 
 
+_TOOL_ALIASES = {
+    "bash": "run_command",
+    "shell": "run_command",
+    "run": "run_command",
+    "read": "read_file",
+    "edit": "edit_file",
+    "multiedit": "edit_file",
+    "write": "create_file",
+    "create": "create_file",
+    "ls": "list_files",
+    "list": "list_files",
+    "glob": "list_files",
+    "grep": "search_files",
+    "search": "search_files",
+    "webfetch": "web_fetch",
+    "web_fetch": "web_fetch",
+    "websearch": "web_search",
+    "web_search": "web_search",
+    "gitstatus": "git_status",
+    "git_status": "git_status",
+    "gitdiff": "git_diff",
+    "git_diff": "git_diff",
+    "gitcommit": "git_commit",
+    "git_commit": "git_commit",
+    "todowrite": "update_memory",
+}
+
+_READ_ONLY_TOOL_NAMES = {
+    "read_file",
+    "list_files",
+    "search_files",
+    "git_status",
+    "git_diff",
+    "grep_ast",
+    "web_fetch",
+    "web_search",
+    "repo_map",
+}
+
+_KNOWN_TOOL_NAMES: set[str] | None = None
+
+
+def _known_tool_names() -> set[str]:
+    global _KNOWN_TOOL_NAMES
+    if _KNOWN_TOOL_NAMES is None:
+        from kaicode.tools.registry import TOOL_DEFINITIONS
+
+        _KNOWN_TOOL_NAMES = {tool["function"]["name"] for tool in TOOL_DEFINITIONS}
+    return _KNOWN_TOOL_NAMES
+
+
+def _split_tool_values(values: tuple[str, ...]) -> list[str]:
+    """Split comma/space tool lists while keeping AI-style Tool(args) chunks."""
+    items: list[str] = []
+    for value in values:
+        if value == "":
+            items.append("")
+            continue
+        token = ""
+        depth = 0
+        for char in value:
+            if char == "(":
+                depth += 1
+            elif char == ")" and depth:
+                depth -= 1
+            if depth == 0 and char in {",", " ", "\t", "\n"}:
+                if token.strip():
+                    items.append(token.strip())
+                token = ""
+            else:
+                token += char
+        if token.strip():
+            items.append(token.strip())
+    return items
+
+
+def _normalize_tool_name(name: str) -> str:
+    base = name.split("(", 1)[0].strip().replace("-", "_").lower()
+    return _TOOL_ALIASES.get(base, base)
+
+
+def _parse_tool_names(values: tuple[str, ...]) -> tuple[set[str], bool, bool]:
+    known = _known_tool_names()
+    parsed: set[str] = set()
+    disables_all = False
+    requests_default = False
+    for raw in _split_tool_values(values):
+        token = raw.strip()
+        lowered = token.lower()
+        if lowered in {"", "none", "off", "disabled"}:
+            disables_all = True
+            continue
+        normalized = _normalize_tool_name(token)
+        if normalized in {"all", "default"}:
+            requests_default = True
+            continue
+        if normalized not in known:
+            known_list = ", ".join(sorted(known))
+            raise ValueError(f"Unknown tool '{raw}'. Known tools: {known_list}")
+        parsed.add(normalized)
+    return parsed, disables_all, requests_default
+
+
+def _build_tool_policy(
+    tools_spec: tuple[str, ...],
+    allowed_tools: tuple[str, ...],
+    disallowed_tools: tuple[str, ...],
+    safe_mode: bool = False,
+) -> tuple[set[str] | None, set[str]]:
+    """Return (allowlist, denylist), accepting both KaiCode and AI tool names."""
+    explicit_tools, disables_all, requests_default = _parse_tool_names(tools_spec)
+    allowed_extra, _, _ = _parse_tool_names(allowed_tools)
+    denied, _, _ = _parse_tool_names(disallowed_tools)
+
+    allowlist: set[str] | None
+    if safe_mode:
+        allowlist = set(_READ_ONLY_TOOL_NAMES)
+    elif tools_spec:
+        if disables_all and not explicit_tools:
+            allowlist = set()
+        elif requests_default and not explicit_tools:
+            allowlist = None
+        else:
+            allowlist = set(explicit_tools)
+    elif allowed_extra:
+        allowlist = set(allowed_extra)
+    else:
+        allowlist = None
+
+    if allowlist is not None and not safe_mode:
+        allowlist.update(allowed_extra)
+    if allowlist is not None:
+        allowlist.difference_update(denied)
+    return allowlist, denied
+
+
 # ── Slash command completer ───────────────────────────────────────────────────
 
 _SLASH_COMMANDS = [
@@ -76,6 +215,7 @@ _SLASH_COMMANDS = [
     ("/load", "Load a saved conversation"),
     ("/sessions", "List all saved sessions"),
     ("/diff", "Show the last applied diff"),
+    ("/verify", "Run the detected project test suite"),
     ("/context", "Show auto-detected context files"),
     ("/memory", "Show project memory (/memory clear to reset)"),
     ("/clear", "Clear conversation history"),
@@ -223,6 +363,29 @@ def run_shell(command: str) -> None:
         console.print(Text(err, style="kaicode.warning"))
 
 
+async def _verify_project(app, command: str = "") -> bool | None:
+    """Run the configured/detected test suite and show a compact verdict."""
+    args = {"command": command} if command else {}
+    result_raw = await asyncio.to_thread(app.tool_registry.call, "run_tests", args)
+    try:
+        result = json.loads(result_raw)
+    except (ValueError, TypeError):
+        print_error("Could not read verification result.")
+        return None
+    if "error" in result:
+        print_error(f"Verification unavailable: {result['error']}")
+        return None
+    output = (result.get("output") or "").strip()
+    command_text = result.get("command") or command or "auto-detected tests"
+    if result.get("passed"):
+        print_success(f"Verification passed: {command_text}")
+    else:
+        print_error(f"Verification failed: {command_text}")
+    if output:
+        console.print(Text(output[-4000:], style="kaicode.muted"))
+    return bool(result.get("passed"))
+
+
 async def _init_project(app, overwrite: bool = False) -> None:
     """Scaffold a KAICODE.md with detected project info + a codebase map."""
     target = Path(app.cwd) / "KAICODE.md"
@@ -326,6 +489,9 @@ async def handle_command(cmd: str, app) -> None:
             _print_diff(app.last_diff)
         else:
             print_info("No diff available.")
+
+    elif command == "/verify":
+        await _verify_project(app, args)
 
     elif command in ("/apply", "/reject"):
         print_info("Changes are applied directly as KaiCode makes them.")
@@ -500,7 +666,87 @@ async def _pick_model(models: list[str], app) -> None:
 @click.option("--provider", "-p", default=None, help="AI provider (ollama/openai/openai/groq)")
 @click.option("--model", "-m", default=None, help="Model name")
 @click.option("--session", "-s", default=None, help="Load a saved session")
+@click.option(
+    "--resume", "-r", "resume_session", default=None, help="Resume a saved session by name"
+)
+@click.option(
+    "--continue",
+    "continue_latest",
+    is_flag=True,
+    help="Continue the newest saved session for the current directory",
+)
+@click.option("--name", "-n", "session_name", default=None, help="Name this session")
 @click.option("--config", "-c", "config_path", default=None, help="Path to config file")
+@click.option("--system-prompt", default=None, help="Replace the default/project system prompt")
+@click.option("--append-system-prompt", default=None, help="Append text to the system prompt")
+@click.option(
+    "--add-dir",
+    "add_dirs",
+    multiple=True,
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=str),
+    help="Additional directories to allow tool access to",
+)
+@click.option(
+    "--tools",
+    "tools_spec",
+    multiple=True,
+    help='Tool allowlist: "default", "", or comma/space-separated names',
+)
+@click.option(
+    "--allowedTools",
+    "--allowed-tools",
+    "allowed_tools",
+    multiple=True,
+    help="Comma/space-separated tool names to allow",
+)
+@click.option(
+    "--disallowedTools",
+    "--disallowed-tools",
+    "disallowed_tools",
+    multiple=True,
+    help="Comma/space-separated tool names to deny",
+)
+@click.option(
+    "--permission-mode",
+    type=click.Choice(["acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"]),
+    default="default",
+    show_default=True,
+    help="Permission mode for state-changing tools",
+)
+@click.option(
+    "--dangerously-skip-permissions",
+    is_flag=True,
+    help="Bypass all state-changing tool permission prompts",
+)
+@click.option(
+    "--safe-mode",
+    is_flag=True,
+    help="Allow only read-only tools for this session",
+)
+@click.option(
+    "--print",
+    "print_mode",
+    is_flag=True,
+    help="Print one response and exit; reads stdin when no prompt is provided",
+)
+@click.option(
+    "--output-format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+    help="Output format for --print",
+)
+@click.option(
+    "--no-session-persistence",
+    is_flag=True,
+    help="Do not save named/resumed one-shot sessions",
+)
+@click.option(
+    "--verify",
+    "verify_after",
+    is_flag=True,
+    help="Run the detected test suite after a one-shot prompt",
+)
 @click.option(
     "--goal",
     "-g",
@@ -511,13 +757,74 @@ async def _pick_model(models: list[str], app) -> None:
 @click.option("--debug", is_flag=True, help="Show debug logs and full tracebacks")
 @click.version_option(version="3.0.0", prog_name="kaicode")
 @click.argument("prompt", nargs=-1)
-def main(provider, model, session, config_path, goal, attempts, debug, prompt):
+def main(
+    provider,
+    model,
+    session,
+    resume_session,
+    continue_latest,
+    session_name,
+    config_path,
+    system_prompt,
+    append_system_prompt,
+    add_dirs,
+    tools_spec,
+    allowed_tools,
+    disallowed_tools,
+    permission_mode,
+    dangerously_skip_permissions,
+    safe_mode,
+    print_mode,
+    output_format,
+    no_session_persistence,
+    verify_after,
+    goal,
+    attempts,
+    debug,
+    prompt,
+):
     """KaiCode — Terminal AI coding assistant.\n\nSupports Ollama, OpenAI, OpenAI, Groq, and any OpenAI-compatible API."""
     configure_logging(debug)
     create_default_config()
 
     try:
-        config = KaiConfig.load()
+        config = KaiConfig.load(config_path)
+    except ValueError as e:
+        print_error(str(e))
+        sys.exit(2)
+
+    if system_prompt is not None:
+        config.system_prompt = system_prompt
+    if append_system_prompt:
+        config.system_prompt = "\n\n".join(
+            part for part in (config.system_prompt, append_system_prompt) if part
+        )
+    if output_format != "text" and not print_mode:
+        print_error("--output-format requires --print.")
+        sys.exit(2)
+    if dangerously_skip_permissions:
+        permission_mode = "bypassPermissions"
+
+    selected_session = session or resume_session
+    if session and resume_session:
+        print_error("Use either --session or --resume, not both.")
+        sys.exit(2)
+    if continue_latest:
+        if selected_session:
+            print_error("Use --continue without --session or --resume.")
+            sys.exit(2)
+        selected_session = Session.latest(os.getcwd())
+        if not selected_session:
+            print_error("No saved sessions found for this directory.")
+            sys.exit(1)
+
+    try:
+        allowed_set, disallowed_set = _build_tool_policy(
+            tools_spec,
+            allowed_tools,
+            disallowed_tools,
+            safe_mode=safe_mode,
+        )
     except ValueError as e:
         print_error(str(e))
         sys.exit(2)
@@ -525,25 +832,68 @@ def main(provider, model, session, config_path, goal, attempts, debug, prompt):
     from kaicode.app import KaiApp
 
     try:
-        app = KaiApp(config, provider_name=provider, model=model)
+        app = KaiApp(
+            config,
+            provider_name=provider,
+            model=model,
+            extra_workspace_roots=list(add_dirs),
+            allowed_tools=allowed_set,
+            disallowed_tools=disallowed_set,
+            permission_mode=permission_mode,
+        )
     except ValueError as e:
         console.print(f"[red]Error:[/] {e}")
         sys.exit(1)
 
-    if session:
-        app.load_session(session)
+    if selected_session:
+        if not app.load_session(selected_session):
+            sys.exit(1)
+    if session_name:
+        app.session.name = session_name
+
+    user_input = " ".join(prompt)
+    if print_mode and not user_input and not sys.stdin.isatty():
+        user_input = sys.stdin.read().strip()
 
     async def _run():
         if goal:
             app.print_header()
             await app.run_goal(goal, max_attempts=max(1, attempts))
-        elif prompt:
-            user_input = " ".join(prompt)
-            app.print_header()
-            print_user_message(user_input)
-            await app.chat(user_input)
+        elif user_input:
+            if print_mode:
+                with console.capture():
+                    content = await app.chat(user_input)
+                    verification = await _verify_project(app) if verify_after else None
+                if output_format == "json":
+                    click.echo(
+                        json.dumps(
+                            {
+                                "response": content or "",
+                                "provider": app.provider_name,
+                                "model": app.model,
+                                "session": app.session.name,
+                                "tokens": app.tokens_used,
+                                "cost": app.cost_estimate,
+                                "verification": verification,
+                            },
+                            ensure_ascii=False,
+                        )
+                    )
+                else:
+                    click.echo(content or "")
+            else:
+                app.print_header()
+                print_user_message(user_input)
+                await app.chat(user_input)
+                if verify_after:
+                    await _verify_project(app)
         else:
+            if print_mode:
+                print_error("--print requires a prompt or stdin.")
+                sys.exit(2)
             await run_interactive(app)
+        if not no_session_persistence and (session_name or selected_session):
+            app.session.save(session_name or app.session.name or selected_session)
 
     try:
         asyncio.run(_run())
