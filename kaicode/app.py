@@ -841,9 +841,7 @@ class KaiApp:
 
     def _default_model(self) -> str:
         defaults = {
-            "ollama": "qwen3:8b",
-            "openai": "model-sonnet-4-6",
-            "openai": "gpt-4o",
+            "ollama": "qwen3:8b",            "openai": "gpt-4o",
             "groq": "llama-3.1-70b-versatile",
             "openai_compat": "default",
             "cyrusago": "cyrusago",
@@ -1052,9 +1050,17 @@ class KaiApp:
                 usage = None
                 status.raw = ""
                 try:
+                    actual_model = self.model
+                    if getattr(self.config, "auto_route", False) and self.config.panel:
+                        msg_len = sum(len(m.content) for m in trimmed_messages if isinstance(m.content, str))
+                        if msg_len > 3000:
+                            actual_model = self.config.panel[-1].split(":")[-1]  # complex/long
+                        else:
+                            actual_model = self.config.panel[0].split(":")[-1]   # simple/short
+
                     stream = self.provider.stream_chat(
                         messages=trimmed_messages,
-                        model=self.model,
+                        model=actual_model,
                         system=system_prompt,  # reused, not rebuilt
                         tools=active_tools,
                     )
@@ -1321,7 +1327,7 @@ class KaiApp:
                 before = CheckpointStack.snapshot(target) if is_write else None
 
                 # Show the change (diff / new contents) BEFORE asking to apply it,
-                # so the user reviews what will happen — like KaiCode.
+                # so the user reviews what will happen 
                 if is_write and tool_name not in self._always_allowed:
                     print_change_preview(tool_name, tool_args, self.cwd)
 

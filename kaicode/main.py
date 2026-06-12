@@ -117,7 +117,7 @@ def _known_tool_names() -> set[str]:
 
 
 def _split_tool_values(values: tuple[str, ...]) -> list[str]:
-    """Split comma/space tool lists while keeping AI-style Tool(args) chunks."""
+    """Split comma/space tool lists while keeping KaiCode-style Tool(args) chunks."""
     items: list[str] = []
     for value in values:
         if value == "":
@@ -174,7 +174,7 @@ def _build_tool_policy(
     disallowed_tools: tuple[str, ...],
     safe_mode: bool = False,
 ) -> tuple[set[str] | None, set[str]]:
-    """Return (allowlist, denylist), accepting both KaiCode and AI tool names."""
+    """Return (allowlist, denylist), accepting both KaiCode and KaiCode tool names."""
     explicit_tools, disables_all, requests_default = _parse_tool_names(tools_spec)
     allowed_extra, _, _ = _parse_tool_names(allowed_tools)
     denied, _, _ = _parse_tool_names(disallowed_tools)
@@ -205,12 +205,16 @@ def _build_tool_policy(
 
 _SLASH_COMMANDS = [
     ("/model", "Switch model — shows picker if no name given"),
-    ("/provider", "Switch provider (ollama/openai/openai/groq)"),
+    ("/provider", "Switch provider (ollama/openai/groq)"),
     ("/init", "Generate a KAICODE.md with project instructions"),
     ("/commit", "AI-generated commit message for current changes"),
     ("/undo", "Revert the last file change the agent made"),
     ("/redo", "Re-apply the last undone change"),
     ("/changes", "List file changes made this session"),
+    ("/snapshot", "Save a named checkpoint of the current file state"),
+    ("/rollback", "Revert files to a named snapshot"),
+    ("/route", "Toggle Cost Optimizer (auto-routing based on task complexity)"),
+    ("/brain", "Generate PROJECT_BRAIN.md knowledge graph"),
     ("/save", "Save current conversation"),
     ("/load", "Load a saved conversation"),
     ("/sessions", "List all saved sessions"),
@@ -220,6 +224,9 @@ _SLASH_COMMANDS = [
     ("/memory", "Show project memory (/memory clear to reset)"),
     ("/clear", "Clear conversation history"),
     ("/status", "Show tokens, model, and provider"),
+    ("/panel", "Run prompt against a panel of models"),
+    ("/consensus", "Run prompt against panel and synthesize answer"),
+    ("/vote", "Run prompt against panel and judge the best answer"),
     ("/help", "Show all commands"),
     ("/quit", "Exit KaiCode"),
 ]
@@ -456,6 +463,33 @@ async def handle_command(cmd: str, app) -> None:
     elif command == "/changes":
         app.list_changes()
 
+    elif command == "/snapshot":
+        if args:
+            app.checkpoints.snapshot_state(args)
+            print_success(f"Snapshot '{args}' saved.")
+        else:
+            print_info("Use: /snapshot <name>")
+
+    elif command == "/rollback":
+        if args:
+            try:
+                count = app.checkpoints.rollback_to(args)
+                print_success(f"Rolled back to '{args}' ({count} changes reverted).")
+            except ValueError as e:
+                print_error(str(e))
+        else:
+            print_info("Use: /rollback <name>")
+
+    elif command == "/route":
+        app.config.auto_route = not app.config.auto_route
+        app.config.save()
+        status = "ON" if app.config.auto_route else "OFF"
+        print_info(f"Cost Optimizer (Auto-Routing) is now {status}.")
+
+    elif command == "/brain":
+        from kaicode.brain import build_project_brain
+        build_project_brain(app.cwd)
+
     elif command == "/model":
         if args:
             await app.switch_model(args)
@@ -477,7 +511,7 @@ async def handle_command(cmd: str, app) -> None:
                 print_error(str(e))
         else:
             print_info(
-                "Available providers: ollama, openai, openai, groq, openai_compat, cyrusago"
+                "Available providers: ollama, openai, groq, openai_compat, cyrusago"
             )
             print_info(f"Current: {app.provider_name}")
             print_info("Use: /provider <name> [model]")
@@ -574,6 +608,27 @@ async def handle_command(cmd: str, app) -> None:
         else:
             print_info("No context files auto-detected.")
 
+    elif command == "/panel":
+        if args:
+            from kaicode.team import run_panel
+            await run_panel(args, app.config, app.config.panel)
+        else:
+            print_info("Use: /panel <prompt>")
+
+    elif command == "/consensus":
+        if args:
+            from kaicode.team import run_consensus
+            await run_consensus(args, app.config, app.provider_name, app.model, app.config.panel)
+        else:
+            print_info("Use: /consensus <prompt>")
+
+    elif command == "/vote":
+        if args:
+            from kaicode.team import run_vote
+            await run_vote(args, app.config, app.provider_name, app.model, app.config.panel)
+        else:
+            print_info("Use: /vote <prompt>")
+
     else:
         print_error(f"Unknown command: {command}  —  type /help for available commands.")
 
@@ -663,7 +718,7 @@ async def _pick_model(models: list[str], app) -> None:
 
 
 @click.command()
-@click.option("--provider", "-p", default=None, help="AI provider (ollama/openai/openai/groq)")
+@click.option("--provider", "-p", default=None, help="AI provider (ollama/openai/groq)")
 @click.option("--model", "-m", default=None, help="Model name")
 @click.option("--session", "-s", default=None, help="Load a saved session")
 @click.option(
@@ -783,7 +838,7 @@ def main(
     debug,
     prompt,
 ):
-    """KaiCode — Terminal AI coding assistant.\n\nSupports Ollama, OpenAI, OpenAI, Groq, and any OpenAI-compatible API."""
+    """KaiCode — Terminal AI coding assistant.\n\nSupports Ollama, OpenAI, Groq, and any OpenAI-compatible API."""
     configure_logging(debug)
     create_default_config()
 
