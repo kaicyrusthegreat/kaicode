@@ -6,7 +6,7 @@ Scope: KaiCode Python CLI package
 ## Summary
 
 Local security checks pass on the clean virtual environment created during the
-release-hardening pass. GitHub Actions run 27392894480 also passed remotely.
+release-hardening pass. GitHub Actions run 27393424468 also passed remotely.
 KaiCode is still not approved for public publishing until a maintainer reviews
 the final release candidate, creates the release tag, and confirms PyPI
 publishing controls.
@@ -71,5 +71,5 @@ Residual risk:
   status: passed.
 - Fresh virtualenv build, test, and pip check pass. Local status: passed.
 - CI passes on Python 3.10, 3.11, and 3.12. Remote status: passed in run
-  27392894480.
-- Multi-OS install smoke tests pass. Remote status: passed in run 27392894480.
+  27393424468.
+- Multi-OS install smoke tests pass. Remote status: passed in run 27393424468.

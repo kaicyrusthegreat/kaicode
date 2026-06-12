@@ -25,7 +25,7 @@ Results:
 ## GitHub Actions Cross-Platform Install
 
 Validated in GitHub Actions run
-[27392894480](https://github.com/kaicyrusdgreat/kaicode/actions/runs/27392894480):
+[27393424468](https://github.com/kaicyrusdgreat/kaicode/actions/runs/27393424468):
 
 - Linux: passed on `ubuntu-latest`.
 - macOS: passed on `macos-latest`.

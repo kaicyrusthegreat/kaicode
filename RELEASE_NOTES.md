@@ -14,7 +14,7 @@ Status: Draft, release-candidate validation passed
 ## Release Status
 
 Local build, package, test, and audit checks pass. GitHub Actions run
-27392894480 passed on Python 3.10, 3.11, 3.12, and Linux/macOS/Windows install
+27393424468 passed on Python 3.10, 3.11, 3.12, and Linux/macOS/Windows install
 smoke jobs. Public publishing is still gated on the tagged GitHub release and
 maintainer confirmation of PyPI ownership/credentials.
 

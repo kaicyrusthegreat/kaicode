@@ -25,7 +25,7 @@ make PYTHON=.venv/bin/python release-check
 
 Local status on 2026-06-12: passed, using Python 3.14.5 for local validation.
 Remote CI status on 2026-06-12: passed on Python 3.10, 3.11, and 3.12 in
-GitHub Actions run 27392894480.
+GitHub Actions run 27393424468.
 
 ## CI Verification
 
