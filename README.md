@@ -4,7 +4,7 @@
 
 **Terminal AI coding assistant supporting multiple AI providers.**
 
-*Current version: 2.2.0*
+*Current version: 3.0.0*
 
 ```
  ██╗  ██╗ █████╗ ██╗ ██████╗ ██████╗ ██████╗ ███████╗
@@ -26,9 +26,9 @@
 ## Features
 
 - **Multiple AI providers**: Ollama (local), OpenAI AI, OpenAI, Groq, any OpenAI-compatible API, and CyruSagO (experimental self-improving core)
-- **Goal mode** *(new in 2.2)*: `kaicode --goal "make tests pass"` — works autonomously, runs the test suite, feeds failures back, and retries until green
-- **AI commit messages** *(new in 2.2)*: `/commit` generates a conventional-commit message from your diff and commits after approval
-- **Token & cost tracking** *(new in 2.2)*: live token count and estimated API cost in the status bar and `/status` (local models are free)
+- **Goal mode** *(new in 3.0)*: `kaicode --goal "make tests pass"` — works autonomously, runs the test suite, feeds failures back, and retries until green
+- **AI commit messages** *(new in 3.0)*: `/commit` generates a conventional-commit message from your diff and commits after approval
+- **Token & cost tracking** *(new in 3.0)*: live token count and estimated API cost in the status bar and `/status` (local models are free)
 - **Agentic tools**: ~20 tools — file editing with diff previews, code search, AST symbol lookup, repo map, shell commands, git, test runner, web search/fetch, GUI automation
 - **Review-before-apply**: diffs and new file contents are shown before you approve each write; per-tool or session-wide allow rules
 - **Checkpoints**: `/undo`, `/redo`, and `/changes` for every file the agent touches

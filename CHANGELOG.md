@@ -8,7 +8,7 @@ KaiCode follows semantic versioning:
 - MINOR: backward-compatible features and provider/tool additions
 - PATCH: backward-compatible bug fixes, docs, and security hardening
 
-## 2.2.0 - 2026-06-12
+## 3.0.0 - 2026-06-12
 
 ### Added
 

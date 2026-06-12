@@ -13,7 +13,7 @@ class CliTests(unittest.TestCase):
         result = CliRunner().invoke(main, ["--version"])
 
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("kaicode, version 2.2.0", result.output)
+        self.assertIn("kaicode, version 3.0.0", result.output)
 
     def test_invalid_config_does_not_print_traceback(self) -> None:
         runner = CliRunner()

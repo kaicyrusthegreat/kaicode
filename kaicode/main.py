@@ -509,7 +509,7 @@ async def _pick_model(models: list[str], app) -> None:
 )
 @click.option("--attempts", default=5, show_default=True, help="Max attempts in goal mode")
 @click.option("--debug", is_flag=True, help="Show debug logs and full tracebacks")
-@click.version_option(version="2.2.0", prog_name="kaicode")
+@click.version_option(version="3.0.0", prog_name="kaicode")
 @click.argument("prompt", nargs=-1)
 def main(provider, model, session, config_path, goal, attempts, debug, prompt):
     """KaiCode — Terminal AI coding assistant.\n\nSupports Ollama, OpenAI, OpenAI, Groq, and any OpenAI-compatible API."""
