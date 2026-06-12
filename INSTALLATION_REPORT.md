@@ -24,11 +24,12 @@ Results:
 
 ## GitHub Actions Cross-Platform Install
 
-Configured in `.github/workflows/ci.yml`:
+Validated in GitHub Actions run
+[27392894480](https://github.com/kaicyrusdgreat/kaicode/actions/runs/27392894480):
 
-- Linux: pending remote run.
-- macOS: pending remote run.
-- Windows: pending remote run.
+- Linux: passed on `ubuntu-latest`.
+- macOS: passed on `macos-latest`.
+- Windows: passed on `windows-latest`.
 
 Expected validation on each OS:
 
@@ -39,12 +40,10 @@ Expected validation on each OS:
 - Session save/load succeeds.
 - Dependency resolution is clean.
 - Uninstall removes the `kaicode` command.
-- CI artifact logs are retained.
+- CI artifact logs are retained in GitHub Actions.
 
 ## Manual Follow-Up
 
-Before public production release, capture logs or screenshots for:
-
-- Windows install verification.
-- Linux install verification.
-- macOS install verification from GitHub Actions or separate clean machines.
+CI logs are linked from `CI_VALIDATION.md`. Separate physical-machine
+verification can still be performed for extra confidence before a broad public
+announcement.

@@ -10,7 +10,8 @@ mobile app repository is added.
 
 ## Current Gate Status
 
-Release status: Locally validated, not yet approved for public release.
+Release status: Release candidate remotely validated, not yet approved for
+public release.
 
 Local verification completed:
 
@@ -29,14 +30,12 @@ Local verification completed:
 
 Blocking items:
 
-- CI configuration is present but has not run in GitHub Actions from this
-  workspace.
 - No crash reporting or analytics exists for a packaged CLI release. This is
   consistent with the README's no-telemetry positioning, but operational
   monitoring for releases still needs a maintainer process.
-- Cross-OS install checks are configured in CI but not yet verified by a remote
-  run.
 - Tagged Git release and release notes publication have not been performed.
+- PyPI project ownership, credentials, maintainer list, and Trusted Publishing
+  configuration still require maintainer confirmation before upload.
 
 Local release validation passed:
 
@@ -55,6 +54,8 @@ Local release validation passed:
 - Fresh wheel install smoke test passed in `/private/tmp/kaicode-wheel-smoke-20260612`.
 - Installed CLI smoke test passed: `kaicode --version`.
 - Local performance baseline captured in `PERFORMANCE_REPORT.md`.
+- GitHub Actions run 27392894480 passed on Python 3.10, 3.11, and 3.12.
+- GitHub Actions install smoke passed on Linux, macOS, and Windows.
 
 ## Required Release Commands
 
@@ -140,7 +141,7 @@ kaicode --provider cyrusago --version
 - CI now targets Python 3.10, 3.11, and 3.12.
 - CI runs compile, format check, lint, tests with coverage, pip check, build,
   twine package checks, wheel install smoke test, and vulnerability scans.
-- Multi-OS install smoke tests are configured for macOS, Linux, and Windows.
+- Multi-OS install smoke tests passed for macOS, Linux, and Windows.
 - Rollback process is documented in `ROLLBACK.md`.
 
 ### Final Verification
@@ -160,7 +161,7 @@ For this Python CLI package, release deliverables are:
 - Performance and startup report: present.
 - Security review summary: present.
 - Environment variable documentation: present in README.
-- Deployment or PyPI publishing documentation: partially covered by
-  `RELEASE_CHECKLIST.md`; PyPI credentials/process still need maintainer input.
+- Deployment or PyPI publishing documentation: present in `PUBLISHING.md`; PyPI
+  ownership and credentials still need maintainer confirmation.
 - Rollback/yank instructions: present.
 - Known issues list: present in release notes draft.

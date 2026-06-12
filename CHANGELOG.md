@@ -32,5 +32,5 @@ KaiCode follows semantic versioning:
 
 ### Known Gaps
 
-- Public release remains blocked until CI, build, audit, and multi-OS install
-  checks pass on a clean release candidate.
+- Public publishing remains gated on a tagged GitHub release, release artifact
+  upload, and maintainer confirmation of PyPI ownership/credentials.

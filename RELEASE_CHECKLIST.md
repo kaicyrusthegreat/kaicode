@@ -24,8 +24,8 @@ make PYTHON=.venv/bin/python release-check
 ```
 
 Local status on 2026-06-12: passed, using Python 3.14.5 for local validation.
-Remote CI must still validate the supported Python versions: 3.10, 3.11, and
-3.12.
+Remote CI status on 2026-06-12: passed on Python 3.10, 3.11, and 3.12 in
+GitHub Actions run 27392894480.
 
 ## CI Verification
 
@@ -35,7 +35,7 @@ Remote CI must still validate the supported Python versions: 3.10, 3.11, and
 - Multi-OS install smoke tests pass on macOS, Linux, and Windows.
 - Coverage artifact uploaded.
 - Dist artifacts uploaded.
-- CI logs or screenshots archived for the release.
+- CI logs archived in GitHub Actions and indexed in `CI_VALIDATION.md`.
 
 ## Package Verification
 

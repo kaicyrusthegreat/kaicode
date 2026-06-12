@@ -23,5 +23,6 @@ python -m safety check --full-report
 Limitations:
 
 - `pip-audit` could not audit local/non-PyPI packages `kaicode` and `cyrusago`.
-- Remote CI has not yet run these scans on GitHub-hosted Linux, macOS, and
-  Windows runners.
+- GitHub Actions run 27392894480 ran `pip-audit` and Safety successfully on
+  Ubuntu for Python 3.10, 3.11, and 3.12. macOS and Windows jobs cover install
+  smoke validation only.
