@@ -33,6 +33,8 @@ class KaiConfig:
     max_context_files: int = 10
     session_dir: str = str(GLOBAL_CONFIG_DIR / "sessions")
     system_prompt: str = ""
+    panel: list[str] = field(default_factory=list)
+    auto_route: bool = False
 
     @classmethod
     def load(cls, path: str | Path | None = None) -> "KaiConfig":
@@ -60,7 +62,6 @@ class KaiConfig:
     def _apply_env(self) -> None:
         env_mappings = {
             "OPENAI_API_KEY": ("openai", "api_key"),
-            "OPENAI_API_KEY": ("openai", "api_key"),
             "GROQ_API_KEY": ("groq", "api_key"),
             "KAICODE_DEFAULT_PROVIDER": None,
         }
@@ -85,6 +86,10 @@ class KaiConfig:
             self.max_context_files = data["max_context_files"]
         if "system_prompt" in data:
             self.system_prompt = data["system_prompt"]
+        if "panel" in data:
+            self.panel = data["panel"]
+        if "auto_route" in data:
+            self.auto_route = data["auto_route"]
         if "providers" in data:
             for name, pdata in (data["providers"] or {}).items():
                 if name not in self.providers:
@@ -109,6 +114,8 @@ class KaiConfig:
             "theme": self.theme,
             "auto_detect_project": self.auto_detect_project,
             "max_context_files": self.max_context_files,
+            "panel": self.panel,
+            "auto_route": self.auto_route,
             "providers": {},
         }
         for name, p in self.providers.items():
@@ -139,19 +146,16 @@ def create_default_config() -> None:
             "theme": "dark",
             "auto_detect_project": True,
             "max_context_files": 10,
+            "panel": ["ollama", "openai", "groq"],
+            "auto_route": False,
             "providers": {
                 "cyrusago": {
                     "base_url": "http://localhost:11434",
-                    "default_model": "cyrusago",
-                    "student_model": "qwen3:4b",
+                    "default_model": "cyrusago-8b",
                 },
                 "ollama": {
                     "base_url": "http://localhost:11434",
                     "default_model": "qwen3:8b",
-                },
-                "openai": {
-                    "api_key": "",
-                    "default_model": "model-sonnet-4-6",
                 },
                 "openai": {
                     "api_key": "",

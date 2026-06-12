@@ -10,17 +10,7 @@ from __future__ import annotations
 LOCAL_PROVIDERS = {"ollama", "openai_compat", "cyrusago"}
 
 # (input $/MTok, output $/MTok), matched by longest prefix so dated variants
-# like model-haiku-4-5-20251001 resolve to their base entry.
 _PRICES: dict[str, tuple[float, float]] = {
-    # OpenAI
-    "model-fable-5": (10.00, 50.00),
-    "model-opus-4-8": (5.00, 25.00),
-    "model-opus-4-7": (5.00, 25.00),
-    "model-opus-4-6": (5.00, 25.00),
-    "model-sonnet-4-6": (3.00, 15.00),
-    "model-haiku-4-5": (1.00, 5.00),
-    "model-3-5-sonnet": (3.00, 15.00),
-    "model-3-5-haiku": (0.80, 4.00),
     # OpenAI
     "gpt-4o-mini": (0.15, 0.60),
     "gpt-4o": (2.50, 10.00),

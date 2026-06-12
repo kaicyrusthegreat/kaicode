@@ -25,7 +25,6 @@
 
 ## Features
 
-- **Multiple AI providers**: Ollama (local), OpenAI AI, OpenAI, Groq, any OpenAI-compatible API, and CyruSagO (experimental self-improving core)
 - **Goal mode** *(new in 3.0)*: `kaicode --goal "make tests pass"` — works autonomously, runs the test suite, feeds failures back, and retries until green
 - **Scriptable one-shot mode** *(new in 3.0)*: `kaicode --print --output-format json "summarize this repo"` for pipes, automation, and CI helpers
 - **AI commit messages** *(new in 3.0)*: `/commit` generates a conventional-commit message from your diff and commits after approval
@@ -80,8 +79,6 @@ kaicode
 # Use local Ollama explicitly
 kaicode --provider ollama
 
-# Use OpenAI AI
-OPENAI_API_KEY=sk-ant-... kaicode --provider openai
 
 # Use OpenAI
 OPENAI_API_KEY=sk-... kaicode --provider openai --model gpt-4o
@@ -121,9 +118,8 @@ providers:
     base_url: http://localhost:11434
     default_model: qwen3:8b
 
-  openai:
     api_key: sk-ant-your-key-here
-    default_model: model-sonnet-4-6
+    default_model: gpt-4o
 
   openai:
     api_key: sk-your-key-here
@@ -141,7 +137,6 @@ providers:
 **Per-project config** (`.kaicode` in project root):
 
 ```yaml
-default_provider: openai
 system_prompt: "This is a Flutter app using Riverpod for state management."
 ```
 
@@ -149,7 +144,6 @@ system_prompt: "This is a Flutter app using Riverpod for state management."
 
 | Variable | Description |
 |---|---|
-| `OPENAI_API_KEY` | OpenAI API key |
 | `OPENAI_API_KEY` | OpenAI API key |
 | `GROQ_API_KEY` | Groq API key |
 | `KAICODE_DEFAULT_PROVIDER` | Default provider name |
@@ -202,7 +196,7 @@ kaicode --config ./team.kaicode.yaml \
 kaicode --verify "fix the failing tests"
 ```
 
-Tool policy options accept both KaiCode tool names and common AI-style
+Tool policy options accept both KaiCode tool names and common KaiCode-style
 aliases such as `Read`, `Edit`, `Write`, `Bash`, `Grep`, and `WebFetch`.
 
 ## Troubleshooting
@@ -210,7 +204,6 @@ aliases such as `Read`, `Edit`, `Write`, `Bash`, `Grep`, and `WebFetch`.
 | Problem | Fix |
 |---|---|
 | `OpenAI API key not set` | Set `OPENAI_API_KEY` or use `kaicode --provider ollama`. |
-| `OpenAI API key not set` | Set `OPENAI_API_KEY` or switch providers. |
 | `Cannot connect to Ollama` | Start Ollama with `ollama serve` and pull a local model. |
 | Invalid YAML config | Fix `~/.kaicode/config.yaml` or the project `.kaicode` file. |
 | Unexpected CLI error | Re-run with `--debug` or set `KAICODE_DEBUG=1` for diagnostics. |
@@ -221,7 +214,6 @@ aliases such as `Read`, `Edit`, `Write`, `Bash`, `Grep`, and `WebFetch`.
 | Provider | Models | Notes |
 |---|---|---|
 | **Ollama** | Any local model | Requires `ollama serve` — free |
-| **OpenAI** | AI Opus, Sonnet, Haiku | Needs API key |
 | **OpenAI** | GPT-4o, GPT-4-turbo, o1, etc. | Needs API key |
 | **Groq** | Llama 3, Mixtral, Gemma | Needs API key (fast!) |
 | **OpenAI-compat** | Any | LM Studio, vLLM, LocalAI, etc. |

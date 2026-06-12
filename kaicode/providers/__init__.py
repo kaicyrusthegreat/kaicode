@@ -3,7 +3,6 @@
 from kaicode.providers.base import BaseProvider, Message, ProviderError
 from kaicode.providers.ollama import OllamaProvider
 from kaicode.providers.openai import OpenAIProvider
-from kaicode.providers.openai import OpenAIProvider
 from kaicode.providers.groq import GroqProvider
 from kaicode.providers.openai_compat import OpenAICompatProvider
 
@@ -12,7 +11,6 @@ __all__ = [
     "Message",
     "ProviderError",
     "OllamaProvider",
-    "OpenAIProvider",
     "OpenAIProvider",
     "GroqProvider",
     "OpenAICompatProvider",
@@ -24,7 +22,6 @@ def get_provider(name: str, config) -> BaseProvider:
     """Factory function to get a provider by name."""
     providers = {
         "ollama": OllamaProvider,
-        "openai": OpenAIProvider,
         "openai": OpenAIProvider,
         "groq": GroqProvider,
         "openai_compat": OpenAICompatProvider,

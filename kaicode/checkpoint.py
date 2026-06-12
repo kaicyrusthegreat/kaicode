@@ -36,6 +36,7 @@ class CheckpointStack:
     def __init__(self) -> None:
         self._undo: list[Change] = []
         self._redo: list[Change] = []
+        self._snapshots: dict[str, list[Change]] = {}
 
     @staticmethod
     def snapshot(path: str) -> str | None:
@@ -89,3 +90,22 @@ class CheckpointStack:
     @property
     def can_redo(self) -> bool:
         return bool(self._redo)
+
+    def snapshot_state(self, name: str) -> None:
+        """Save a pointer to the current undo stack under a name."""
+        self._snapshots[name] = list(self._undo)
+
+    def rollback_to(self, name: str) -> int:
+        """Revert changes back to a named snapshot. Returns number of changes reverted."""
+        if name not in self._snapshots:
+            raise ValueError(f"Snapshot '{name}' not found.")
+        
+        target_state = self._snapshots[name]
+        reverted_count = 0
+        
+        # Keep undoing until our undo stack matches the target state
+        while len(self._undo) > len(target_state):
+            self.undo()
+            reverted_count += 1
+            
+        return reverted_count

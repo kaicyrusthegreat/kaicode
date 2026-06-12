@@ -56,12 +56,6 @@ _MODEL_LABELS = {
     # CyruSagO (self-improving — learns from every turn)
     "cyrusago": "Self-improving core — recalls past lessons, learns from each turn (experimental)",
     # OpenAI
-    "model-opus-4-8": "Best for complex reasoning, architecture planning, and large codebases",
-    "model-sonnet-4-6": "Best for everyday coding — smart, fast, well-balanced",
-    "model-haiku-4-5-20251001": "Best for quick edits, simple tasks, and fast responses",
-    "model-3-5-sonnet-20241022": "Best for strong reasoning and reliable code generation",
-    "model-3-5-haiku-20241022": "Best for rapid, lightweight coding tasks",
-    # OpenAI
     "gpt-4o": "Best for complex coding, vision, and multi-step instructions",
     "gpt-4-turbo": "Best for long documents and context-heavy tasks",
     "gpt-4o-mini": "Best for fast, affordable day-to-day tasks",
@@ -413,7 +407,6 @@ def _print_diff(diff: str, title: str = "diff", border: str = "kaicode.separator
     )
 
 
-# Full-width background tints for the line-by-line diff (KaiCode style).
 _DIFF_ADD_BG = "on #14351f"
 _DIFF_DEL_BG = "on #3a1717"
 
@@ -488,7 +481,6 @@ def _print_change_header(verb: str, path: str, adds: int, dels: int) -> None:
 
 def print_change_preview(tool_name: str, args: dict, cwd: str) -> bool:
     """Show what a write tool *would* do, before the permission prompt — the diff
-    for an edit, or the new contents for a create. Mirrors KaiCode's
     review-before-apply flow. Returns True if a preview was rendered."""
     if tool_name == "edit_file":
         path = args.get("path", "")
@@ -642,7 +634,6 @@ def print_help() -> None:
     sections = [
         ("Models & Providers", ""),
         ("/model [name]", "Switch model — shows picker if no name given"),
-        ("/provider [name]", "Switch provider — ollama / openai / openai / groq"),
         ("Project & Code", ""),
         ("/init [--force]", "Generate a KAICODE.md with project instructions"),
         ("/commit", "AI-generated commit message for current changes"),
