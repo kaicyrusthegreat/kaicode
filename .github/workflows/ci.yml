@@ -5,6 +5,17 @@ on:
   pull_request:
 
 jobs:
+  secret-scan:
+    name: Secret Scanner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks Secret Scan
+        uses: gitleaks/gitleaks-action@v2
+
   test-build-audit:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
