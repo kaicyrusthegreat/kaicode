@@ -1,5 +1,7 @@
 # KaiCode
 
+[![CI](https://github.com/kaicyrusdgreat/kaicode/actions/workflows/ci.yml/badge.svg)](https://github.com/kaicyrusdgreat/kaicode/actions/workflows/ci.yml)
+
 **Terminal AI coding assistant supporting multiple AI providers.**
 
 *Current version: 2.2.0*
@@ -39,6 +41,8 @@
 
 ## Installation
 
+KaiCode supports Python 3.10, 3.11, and 3.12.
+
 ```bash
 pip install kaicode
 ```
@@ -50,6 +54,20 @@ git clone https://github.com/kaicyrusdgreat/kaicode
 cd kaicode
 pip install -e .
 ```
+
+## Development Setup
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m pip install -e .
+make PYTHON=.venv/bin/python release-check
+```
+
+The release check runs compile validation, formatting check, lint, tests with
+coverage, dependency conflict checks, package build, package metadata checks,
+and dependency vulnerability scans.
 
 ## Quick Start
 
@@ -148,6 +166,17 @@ system_prompt: "This is a Flutter app using Riverpod for state management."
 | `/quit` | Exit |
 
 **Tips:** `@path/to/file` includes a specific file as context · `!command` runs a shell command inline · `ESC` cancels generation.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `OpenAI API key not set` | Set `OPENAI_API_KEY` or use `kaicode --provider ollama`. |
+| `OpenAI API key not set` | Set `OPENAI_API_KEY` or switch providers. |
+| `Cannot connect to Ollama` | Start Ollama with `ollama serve` and pull a local model. |
+| Invalid YAML config | Fix `~/.kaicode/config.yaml` or the project `.kaicode` file. |
+| Unexpected CLI error | Re-run with `--debug` or set `KAICODE_DEBUG=1` for diagnostics. |
+| Package build fails | Recreate `.venv`, install `requirements-dev.txt`, then run `python -m build`. |
 
 ## Supported Providers
 

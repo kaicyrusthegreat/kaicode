@@ -1,0 +1,12 @@
+setuptools==80.9.0
+wheel==0.47.0
+packaging==24.2
+click==8.1.8
+build==1.2.2.post1
+twine==6.2.0
+pytest==9.0.3
+pytest-cov==6.0.0
+coverage==7.6.10
+ruff==0.8.6
+pip-audit==2.7.3
+safety==3.8.1

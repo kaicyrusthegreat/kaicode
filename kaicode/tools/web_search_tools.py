@@ -60,8 +60,8 @@ def web_search(query: str, max_results: int = 5) -> dict[str, Any]:
             params={"q": query},
             headers={
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                              "AppleWebKit/537.36 (KHTML, like Gecko) "
-                              "Chrome/120.0.0.0 Safari/537.36",
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36",
             },
             timeout=15,
             follow_redirects=True,
@@ -77,9 +77,10 @@ def web_search(query: str, max_results: int = 5) -> dict[str, Any]:
         for r in results:
             url = r.get("url", "")
             # Extract actual URL from DDG redirect
-            match = re.search(r'uddg=([^&]+)', url)
+            match = re.search(r"uddg=([^&]+)", url)
             if match:
                 from urllib.parse import unquote
+
                 r["url"] = unquote(match.group(1))
 
         if not results:
@@ -88,11 +89,13 @@ def web_search(query: str, max_results: int = 5) -> dict[str, Any]:
             snippets = re.findall(r'class="result__snippet"[^>]*>([^<]+)<', resp.text)
             urls = re.findall(r'class="result__url"[^>]*>([^<]+)<', resp.text)
             for i in range(min(max_results, len(titles))):
-                results.append({
-                    "title": titles[i].strip() if i < len(titles) else "",
-                    "snippet": snippets[i].strip() if i < len(snippets) else "",
-                    "url": urls[i].strip() if i < len(urls) else "",
-                })
+                results.append(
+                    {
+                        "title": titles[i].strip() if i < len(titles) else "",
+                        "snippet": snippets[i].strip() if i < len(snippets) else "",
+                        "url": urls[i].strip() if i < len(urls) else "",
+                    }
+                )
 
         return {
             "query": query,

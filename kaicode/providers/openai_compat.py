@@ -19,6 +19,7 @@ class OpenAICompatProvider(OpenAIProvider):
 
     async def check_connection(self) -> bool:
         import httpx
+
         headers = {}
         if self.config.api_key:
             headers["Authorization"] = f"Bearer {self.config.api_key}"
@@ -34,6 +35,7 @@ class OpenAICompatProvider(OpenAIProvider):
 
     async def list_models(self) -> list[str]:
         import httpx
+
         headers = {}
         if self.config.api_key:
             headers["Authorization"] = f"Bearer {self.config.api_key}"

@@ -17,42 +17,59 @@ class ProjectInfo(NamedTuple):
 
 
 PROJECT_SIGNATURES: list[tuple[str, list[str], str, list[str]]] = [
-    ("flutter",      ["pubspec.yaml", "lib/main.dart"],              "Flutter/Dart app",
-     ["pubspec.yaml", "lib/main.dart"]),
-    ("python_package",["pyproject.toml", "setup.py"],               "Python package",
-     ["pyproject.toml", "README.md"]),
-    ("python",       ["requirements.txt", "*.py"],                   "Python project",
-     ["requirements.txt"]),
-    ("node",         ["package.json"],                               "Node.js project",
-     ["package.json"]),
-    ("react",        ["package.json", "src/App.tsx", "src/App.jsx"], "React app",
-     ["package.json", "src/App.tsx", "src/App.jsx"]),
-    ("nextjs",       ["package.json", "next.config.js", "next.config.ts"], "Next.js app",
-     ["package.json", "next.config.js"]),
-    ("rust",         ["Cargo.toml"],                                 "Rust project",
-     ["Cargo.toml", "src/main.rs", "src/lib.rs"]),
-    ("go",           ["go.mod"],                                     "Go module",
-     ["go.mod"]),
-    ("java_gradle",  ["build.gradle", "build.gradle.kts"],           "Java/Kotlin Gradle project",
-     ["build.gradle", "build.gradle.kts"]),
-    ("java_maven",   ["pom.xml"],                                    "Java Maven project",
-     ["pom.xml"]),
-    ("ruby",         ["Gemfile"],                                    "Ruby project",
-     ["Gemfile"]),
-    ("php",          ["composer.json"],                              "PHP project",
-     ["composer.json"]),
-    ("swift",        ["Package.swift", "*.xcodeproj"],               "Swift/Xcode project",
-     ["Package.swift"]),
-    ("elixir",       ["mix.exs"],                                    "Elixir/Phoenix project",
-     ["mix.exs"]),
-    ("django",       ["manage.py", "settings.py"],                   "Django project",
-     ["manage.py", "requirements.txt"]),
-    ("fastapi",      ["main.py", "requirements.txt"],                "FastAPI project",
-     ["main.py", "requirements.txt"]),
-    ("docker",       ["Dockerfile", "docker-compose.yml"],           "Docker project",
-     ["Dockerfile", "docker-compose.yml"]),
-    ("terraform",    ["*.tf", "main.tf"],                            "Terraform infrastructure",
-     ["main.tf", "variables.tf"]),
+    (
+        "flutter",
+        ["pubspec.yaml", "lib/main.dart"],
+        "Flutter/Dart app",
+        ["pubspec.yaml", "lib/main.dart"],
+    ),
+    (
+        "python_package",
+        ["pyproject.toml", "setup.py"],
+        "Python package",
+        ["pyproject.toml", "README.md"],
+    ),
+    ("python", ["requirements.txt", "*.py"], "Python project", ["requirements.txt"]),
+    ("node", ["package.json"], "Node.js project", ["package.json"]),
+    (
+        "react",
+        ["package.json", "src/App.tsx", "src/App.jsx"],
+        "React app",
+        ["package.json", "src/App.tsx", "src/App.jsx"],
+    ),
+    (
+        "nextjs",
+        ["package.json", "next.config.js", "next.config.ts"],
+        "Next.js app",
+        ["package.json", "next.config.js"],
+    ),
+    ("rust", ["Cargo.toml"], "Rust project", ["Cargo.toml", "src/main.rs", "src/lib.rs"]),
+    ("go", ["go.mod"], "Go module", ["go.mod"]),
+    (
+        "java_gradle",
+        ["build.gradle", "build.gradle.kts"],
+        "Java/Kotlin Gradle project",
+        ["build.gradle", "build.gradle.kts"],
+    ),
+    ("java_maven", ["pom.xml"], "Java Maven project", ["pom.xml"]),
+    ("ruby", ["Gemfile"], "Ruby project", ["Gemfile"]),
+    ("php", ["composer.json"], "PHP project", ["composer.json"]),
+    ("swift", ["Package.swift", "*.xcodeproj"], "Swift/Xcode project", ["Package.swift"]),
+    ("elixir", ["mix.exs"], "Elixir/Phoenix project", ["mix.exs"]),
+    ("django", ["manage.py", "settings.py"], "Django project", ["manage.py", "requirements.txt"]),
+    (
+        "fastapi",
+        ["main.py", "requirements.txt"],
+        "FastAPI project",
+        ["main.py", "requirements.txt"],
+    ),
+    (
+        "docker",
+        ["Dockerfile", "docker-compose.yml"],
+        "Docker project",
+        ["Dockerfile", "docker-compose.yml"],
+    ),
+    ("terraform", ["*.tf", "main.tf"], "Terraform infrastructure", ["main.tf", "variables.tf"]),
 ]
 
 
@@ -103,21 +120,30 @@ def _git_context(root: Path) -> str:
     try:
         branch = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=root, capture_output=True, text=True, timeout=3,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=3,
         )
         if branch.returncode == 0:
             lines.append(f"Branch: {branch.stdout.strip()}")
 
         log = subprocess.run(
             ["git", "log", "--oneline", "-8"],
-            cwd=root, capture_output=True, text=True, timeout=3,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=3,
         )
         if log.returncode == 0 and log.stdout.strip():
             lines.append("Recent commits:\n" + log.stdout.strip())
 
         diff = subprocess.run(
             ["git", "diff", "--stat", "HEAD"],
-            cwd=root, capture_output=True, text=True, timeout=3,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=3,
         )
         if diff.returncode == 0 and diff.stdout.strip():
             lines.append("Uncommitted changes:\n" + diff.stdout.strip()[:600])
@@ -132,14 +158,20 @@ def _git_context_slim(root: Path) -> str:
     try:
         branch = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=root, capture_output=True, text=True, timeout=2,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=2,
         )
         if branch.returncode == 0:
             lines.append(f"Branch: {branch.stdout.strip()}")
 
         log = subprocess.run(
             ["git", "log", "--oneline", "-4"],
-            cwd=root, capture_output=True, text=True, timeout=2,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=2,
         )
         if log.returncode == 0 and log.stdout.strip():
             lines.append(log.stdout.strip())
@@ -176,7 +208,7 @@ def load_instructions(root: Path) -> str:
                 text = p.read_text(encoding="utf-8", errors="replace").strip()
                 if text:
                     chunks.append(f"### {name}\n{text[:8000]}")
-                    break   # highest-precedence project file wins
+                    break  # highest-precedence project file wins
         except Exception:
             continue
 
@@ -274,4 +306,3 @@ def build_system_prompt(project_info: ProjectInfo, extra: str = "", model: str =
         sections.append(extra)
 
     return "\n\n".join(sections)
-

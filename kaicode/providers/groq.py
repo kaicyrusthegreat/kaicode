@@ -34,6 +34,7 @@ class GroqProvider(OpenAIProvider):
         if not self.config.api_key:
             return False
         import httpx
+
         try:
             response = await self.http.get(
                 f"{self.api_base}/models",

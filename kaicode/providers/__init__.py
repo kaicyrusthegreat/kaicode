@@ -35,6 +35,7 @@ def get_provider(name: str, config) -> BaseProvider:
     if name == "cyrusago":
         try:
             from kaicode.providers.cyrusago import CyruSagOProvider
+
             providers["cyrusago"] = CyruSagOProvider
         except ImportError:
             raise ImportError(

@@ -18,9 +18,9 @@ def search_files(
 ) -> dict[str, Any]:
     """Search for a pattern in files."""
     try:
-        max_results    = int(max_results)
+        max_results = int(max_results)
         case_sensitive = str(case_sensitive).lower() not in ("false", "0", "")
-        use_regex      = str(use_regex).lower() not in ("false", "0", "")
+        use_regex = str(use_regex).lower() not in ("false", "0", "")
         root = Path(path).expanduser().resolve()
         if not root.exists():
             return {"error": f"Path not found: {path}"}
@@ -35,16 +35,41 @@ def search_files(
             compiled = re.compile(re.escape(pattern), flags)
 
         SKIP_DIRS = {
-            ".git", "__pycache__", "node_modules", ".venv", "venv",
-            "dist", "build", ".eggs",
+            ".git",
+            "__pycache__",
+            "node_modules",
+            ".venv",
+            "venv",
+            "dist",
+            "build",
+            ".eggs",
             # Vendored / generated trees — searching them surfaces dependency
             # source (e.g. ios/Pods/**.h) as if it were project code.
-            "Pods", "Carthage", "DerivedData", "vendor", "target", "coverage",
+            "Pods",
+            "Carthage",
+            "DerivedData",
+            "vendor",
+            "target",
+            "coverage",
         }
         SKIP_EXTENSIONS = {
-            ".pyc", ".pyo", ".class", ".o", ".so", ".dylib",
-            ".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf",
-            ".zip", ".tar", ".gz", ".bin", ".exe",
+            ".pyc",
+            ".pyo",
+            ".class",
+            ".o",
+            ".so",
+            ".dylib",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".ico",
+            ".pdf",
+            ".zip",
+            ".tar",
+            ".gz",
+            ".bin",
+            ".exe",
         }
 
         results = []
@@ -101,8 +126,10 @@ def _search_file(
         if len(results) >= max_results:
             break
         if pattern.search(line):
-            results.append({
-                "file": str(file_path.relative_to(root)),
-                "line": lineno,
-                "content": line.strip(),
-            })
+            results.append(
+                {
+                    "file": str(file_path.relative_to(root)),
+                    "line": lineno,
+                    "content": line.strip(),
+                }
+            )

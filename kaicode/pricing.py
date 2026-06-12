@@ -13,28 +13,29 @@ LOCAL_PROVIDERS = {"ollama", "openai_compat", "cyrusago"}
 # like model-haiku-4-5-20251001 resolve to their base entry.
 _PRICES: dict[str, tuple[float, float]] = {
     # OpenAI
-    "model-fable-5":      (10.00, 50.00),
-    "model-opus-4-8":     (5.00, 25.00),
-    "model-opus-4-7":     (5.00, 25.00),
-    "model-opus-4-6":     (5.00, 25.00),
-    "model-sonnet-4-6":   (3.00, 15.00),
-    "model-haiku-4-5":    (1.00, 5.00),
-    "model-3-5-sonnet":   (3.00, 15.00),
-    "model-3-5-haiku":    (0.80, 4.00),
+    "model-fable-5": (10.00, 50.00),
+    "model-opus-4-8": (5.00, 25.00),
+    "model-opus-4-7": (5.00, 25.00),
+    "model-opus-4-6": (5.00, 25.00),
+    "model-sonnet-4-6": (3.00, 15.00),
+    "model-haiku-4-5": (1.00, 5.00),
+    "model-3-5-sonnet": (3.00, 15.00),
+    "model-3-5-haiku": (0.80, 4.00),
     # OpenAI
-    "gpt-4o-mini":         (0.15, 0.60),
-    "gpt-4o":              (2.50, 10.00),
-    "gpt-4-turbo":         (10.00, 30.00),
-    "o1":                  (15.00, 60.00),
+    "gpt-4o-mini": (0.15, 0.60),
+    "gpt-4o": (2.50, 10.00),
+    "gpt-4-turbo": (10.00, 30.00),
+    "o1": (15.00, 60.00),
     # Groq
-    "llama-3.1-70b":       (0.59, 0.79),
-    "llama-3.3-70b":       (0.59, 0.79),
-    "mixtral-8x7b":        (0.24, 0.24),
+    "llama-3.1-70b": (0.59, 0.79),
+    "llama-3.3-70b": (0.59, 0.79),
+    "mixtral-8x7b": (0.24, 0.24),
 }
 
 
-def estimate_cost(provider: str, model: str,
-                  prompt_tokens: int, completion_tokens: int) -> float | None:
+def estimate_cost(
+    provider: str, model: str, prompt_tokens: int, completion_tokens: int
+) -> float | None:
     """Estimated USD cost of one exchange. 0.0 for local providers,
     None when the model's pricing is unknown."""
     if provider in LOCAL_PROVIDERS:

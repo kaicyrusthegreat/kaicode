@@ -29,37 +29,46 @@ def _search_python(file_path: Path, root: Path, symbol: str, symbol_type: str) -
     hits = []
     sym_lower = symbol.lower()
     for node in ast.walk(tree):
-        if symbol_type in ("any", "function") and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        if symbol_type in ("any", "function") and isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef)
+        ):
             if sym_lower in node.name.lower():
-                hits.append({
-                    "file": str(file_path.relative_to(root)),
-                    "line": node.lineno,
-                    "type": "function",
-                    "name": node.name,
-                    "signature": _py_signature(node),
-                })
+                hits.append(
+                    {
+                        "file": str(file_path.relative_to(root)),
+                        "line": node.lineno,
+                        "type": "function",
+                        "name": node.name,
+                        "signature": _py_signature(node),
+                    }
+                )
         elif symbol_type in ("any", "class") and isinstance(node, ast.ClassDef):
             if sym_lower in node.name.lower():
-                hits.append({
-                    "file": str(file_path.relative_to(root)),
-                    "line": node.lineno,
-                    "type": "class",
-                    "name": node.name,
-                })
+                hits.append(
+                    {
+                        "file": str(file_path.relative_to(root)),
+                        "line": node.lineno,
+                        "type": "class",
+                        "name": node.name,
+                    }
+                )
     return hits
 
 
 _LANG_PATTERNS: dict[str, list[str]] = {
-    ".js":   [r'\b(?:function|const|let|var|class)\s+({sym})\b', r'\b({sym})\s*[:=]\s*(?:function|\()'],
-    ".ts":   [r'\b(?:function|const|let|var|class|interface|type)\s+({sym})\b'],
-    ".tsx":  [r'\b(?:function|const|class)\s+({sym})\b'],
-    ".dart": [r'\b\w+\s+({sym})\s*[({]', r'\bclass\s+({sym})\b'],
-    ".go":   [r'\bfunc\s+(?:\([^)]+\)\s*)?({sym})\b', r'\btype\s+({sym})\b'],
-    ".rs":   [r'\b(?:fn|struct|enum|trait|impl)\s+({sym})\b'],
-    ".java": [r'\b(?:class|interface|void|public|private|protected)\s+({sym})\b'],
-    ".kt":   [r'\b(?:fun|class|object|interface)\s+({sym})\b'],
-    ".rb":   [r'\bdef\s+({sym})\b', r'\bclass\s+({sym})\b'],
-    ".swift":[r'\b(?:func|class|struct|enum)\s+({sym})\b'],
+    ".js": [
+        r"\b(?:function|const|let|var|class)\s+({sym})\b",
+        r"\b({sym})\s*[:=]\s*(?:function|\()",
+    ],
+    ".ts": [r"\b(?:function|const|let|var|class|interface|type)\s+({sym})\b"],
+    ".tsx": [r"\b(?:function|const|class)\s+({sym})\b"],
+    ".dart": [r"\b\w+\s+({sym})\s*[({]", r"\bclass\s+({sym})\b"],
+    ".go": [r"\bfunc\s+(?:\([^)]+\)\s*)?({sym})\b", r"\btype\s+({sym})\b"],
+    ".rs": [r"\b(?:fn|struct|enum|trait|impl)\s+({sym})\b"],
+    ".java": [r"\b(?:class|interface|void|public|private|protected)\s+({sym})\b"],
+    ".kt": [r"\b(?:fun|class|object|interface)\s+({sym})\b"],
+    ".rb": [r"\bdef\s+({sym})\b", r"\bclass\s+({sym})\b"],
+    ".swift": [r"\b(?:func|class|struct|enum)\s+({sym})\b"],
 }
 
 
@@ -76,13 +85,15 @@ def _search_regex(file_path: Path, root: Path, symbol: str) -> list[dict]:
     for lineno, line in enumerate(lines, 1):
         for pat in compiled:
             if pat.search(line):
-                hits.append({
-                    "file": str(file_path.relative_to(root)),
-                    "line": lineno,
-                    "type": "definition",
-                    "name": symbol,
-                    "content": line.strip()[:120],
-                })
+                hits.append(
+                    {
+                        "file": str(file_path.relative_to(root)),
+                        "line": lineno,
+                        "type": "definition",
+                        "name": symbol,
+                        "content": line.strip()[:120],
+                    }
+                )
                 break
     return hits
 
@@ -121,8 +132,8 @@ def grep_ast(
 
     walk(root)
     return {
-        "symbol":  symbol,
-        "type":    symbol_type,
+        "symbol": symbol,
+        "type": symbol_type,
         "results": results[:30],
-        "total":   len(results),
+        "total": len(results),
     }

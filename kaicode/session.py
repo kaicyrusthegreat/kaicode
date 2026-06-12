@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+import re
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,28 @@ from kaicode.config import GLOBAL_CONFIG_DIR
 
 
 SESSIONS_DIR = GLOBAL_CONFIG_DIR / "sessions"
+_SESSION_NAME_MAX = 120
+_PATH_SEPARATORS_RE = re.compile(r"[\\/]+")
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]+")
+
+
+def _safe_session_name(name: str | None, fallback: str) -> str:
+    """Return a filesystem-safe session name that cannot escape SESSIONS_DIR."""
+    raw = (name or fallback).strip()
+    safe = _CONTROL_CHARS_RE.sub("", raw)
+    safe = _PATH_SEPARATORS_RE.sub("_", safe)
+    safe = safe.strip()
+    if not safe:
+        safe = fallback
+    return safe[:_SESSION_NAME_MAX]
+
+
+def _session_path(name: str) -> Path:
+    path = (SESSIONS_DIR / f"{name}.json").resolve()
+    root = SESSIONS_DIR.resolve()
+    if path.parent != root:
+        raise ValueError("Invalid session name.")
+    return path
 
 
 @dataclass
@@ -44,9 +67,10 @@ class Session:
 
     def save(self, name: str | None = None) -> Path:
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-        save_name = name or self.name or f"session_{int(self.created_at)}"
+        fallback = self.name or f"session_{int(self.created_at)}"
+        save_name = _safe_session_name(name, fallback)
         self.name = save_name
-        path = SESSIONS_DIR / f"{save_name}.json"
+        path = _session_path(save_name)
         data = {
             "name": self.name,
             "provider": self.provider,
@@ -59,7 +83,7 @@ class Session:
                 {
                     "role": m.role,
                     "content": m.content,
-                    **({"tool_calls":   m.tool_calls}   if m.tool_calls   else {}),
+                    **({"tool_calls": m.tool_calls} if m.tool_calls else {}),
                     **({"tool_results": m.tool_results} if m.tool_results else {}),
                 }
                 for m in self.messages
@@ -70,10 +94,19 @@ class Session:
 
     @classmethod
     def load(cls, name: str) -> "Session":
-        path = SESSIONS_DIR / f"{name}.json"
+        safe_name = _safe_session_name(name, "")
+        if not safe_name:
+            raise FileNotFoundError("Session not found: <empty>")
+        path = _session_path(safe_name)
         if not path.exists():
             raise FileNotFoundError(f"Session not found: {name}")
-        data = json.loads(path.read_text())
+        try:
+            data = json.loads(path.read_text())
+        except json.JSONDecodeError as exc:
+            raise ValueError("Session file is corrupted or unreadable.") from exc
+        required = {"name", "provider", "model", "cwd"}
+        if not required.issubset(data):
+            raise ValueError("Session file is missing required fields.")
         session = cls(
             name=data["name"],
             provider=data["provider"],
@@ -84,28 +117,34 @@ class Session:
             metadata=data.get("metadata", {}),
         )
         for m in data.get("messages", []):
-            session.messages.append(Message(
-                role=m["role"],
-                content=m["content"],
-                tool_calls=m.get("tool_calls", []),
-                tool_results=m.get("tool_results", []),
-            ))
+            session.messages.append(
+                Message(
+                    role=m["role"],
+                    content=m["content"],
+                    tool_calls=m.get("tool_calls", []),
+                    tool_results=m.get("tool_results", []),
+                )
+            )
         return session
 
     @classmethod
     def list_sessions(cls) -> list[dict]:
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         sessions = []
-        for path in sorted(SESSIONS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        for path in sorted(
+            SESSIONS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
+        ):
             try:
                 data = json.loads(path.read_text())
-                sessions.append({
-                    "name": data.get("name", path.stem),
-                    "provider": data.get("provider", "?"),
-                    "model": data.get("model", "?"),
-                    "messages": len(data.get("messages", [])),
-                    "updated_at": data.get("updated_at", 0),
-                })
+                sessions.append(
+                    {
+                        "name": data.get("name", path.stem),
+                        "provider": data.get("provider", "?"),
+                        "model": data.get("model", "?"),
+                        "messages": len(data.get("messages", [])),
+                        "updated_at": data.get("updated_at", 0),
+                    }
+                )
             except (json.JSONDecodeError, KeyError):
                 pass
         return sessions

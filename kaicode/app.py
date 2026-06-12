@@ -43,34 +43,123 @@ from kaicode.ui.display import (
 
 
 MAX_TOOL_ITERATIONS = 25
-MAX_HISTORY_MESSAGES = 50   # trim older messages beyond this
+MAX_HISTORY_MESSAGES = 50  # trim older messages beyond this
 
 # Words the symbol-reference heuristic must never auto-search for — they appear
 # in nearly every file (README especially), so searching them auto-loads junk.
 _STOPWORD_SYMS = {
-    "the", "this", "that", "these", "those", "file", "files", "code", "line",
-    "lines", "function", "class", "method", "value", "error", "issue", "bug",
-    "feature", "change", "changes", "thing", "stuff", "part", "name", "data",
-    "text", "list", "item", "with", "from", "into", "your", "you", "and",
-    "for", "all", "any", "one", "two", "new", "old", "use", "using", "make",
-    "show", "add", "fix", "run", "see", "get", "set", "test", "tests",
+    "the",
+    "this",
+    "that",
+    "these",
+    "those",
+    "file",
+    "files",
+    "code",
+    "line",
+    "lines",
+    "function",
+    "class",
+    "method",
+    "value",
+    "error",
+    "issue",
+    "bug",
+    "feature",
+    "change",
+    "changes",
+    "thing",
+    "stuff",
+    "part",
+    "name",
+    "data",
+    "text",
+    "list",
+    "item",
+    "with",
+    "from",
+    "into",
+    "your",
+    "you",
+    "and",
+    "for",
+    "all",
+    "any",
+    "one",
+    "two",
+    "new",
+    "old",
+    "use",
+    "using",
+    "make",
+    "show",
+    "add",
+    "fix",
+    "run",
+    "see",
+    "get",
+    "set",
+    "test",
+    "tests",
     # Common 6+ letter English words that slip past the identifier filter and
     # pull in irrelevant files (they appear as "the message", "the result"…).
-    "message", "commit", "result", "results", "sample", "sentence", "project",
-    "repository", "directory", "folder", "subfolder", "subfolders", "error",
-    "errors", "output", "confirm", "contents", "content", "command", "commands",
-    "afterward", "argument", "arguments", "example", "examples", "exactly",
-    "number", "numbers", "string", "values", "create", "created", "inside",
-    "problem", "problems", "question", "questions", "answer", "answers",
-    "reason", "reasons", "solution", "solutions",
+    "message",
+    "commit",
+    "result",
+    "results",
+    "sample",
+    "sentence",
+    "project",
+    "repository",
+    "directory",
+    "folder",
+    "subfolder",
+    "subfolders",
+    "error",
+    "errors",
+    "output",
+    "confirm",
+    "contents",
+    "content",
+    "command",
+    "commands",
+    "afterward",
+    "argument",
+    "arguments",
+    "example",
+    "examples",
+    "exactly",
+    "number",
+    "numbers",
+    "string",
+    "values",
+    "create",
+    "created",
+    "inside",
+    "problem",
+    "problems",
+    "question",
+    "questions",
+    "answer",
+    "answers",
+    "reason",
+    "reasons",
+    "solution",
+    "solutions",
 }
 
 # ── Tool selection ────────────────────────────────────────────────────────────
 
 _CORE_TOOL_NAMES = {
-    "read_file", "edit_file", "create_file", "create_directory",
-    "list_files", "search_files", "run_command",
+    "read_file",
+    "edit_file",
+    "create_file",
+    "create_directory",
+    "list_files",
+    "search_files",
+    "run_command",
 }
+
 
 def _select_tools(message: str) -> list[dict]:
     """Return the relevant tool subset. Core tools always; extras only when hinted."""
@@ -82,25 +171,77 @@ def _select_tools(message: str) -> list[dict]:
         names.add("run_tests")
     if any(w in lower for w in ("memory", "remember", "note", "save for later")):
         names.add("update_memory")
-    if any(w in lower for w in ("symbol", "function", "class", "def ", "struct", "interface", "ast")):
+    if any(
+        w in lower for w in ("symbol", "function", "class", "def ", "struct", "interface", "ast")
+    ):
         names.add("grep_ast")
-    if any(w in lower for w in ("structure", "overview", "architecture", "codebase",
-                                "the project", "this project", "the repo", "understand",
-                                "explain the", "how does this", "where is")):
+    if any(
+        w in lower
+        for w in (
+            "structure",
+            "overview",
+            "architecture",
+            "codebase",
+            "the project",
+            "this project",
+            "the repo",
+            "understand",
+            "explain the",
+            "how does this",
+            "where is",
+        )
+    ):
         names.add("repo_map")
         names.add("grep_ast")
     # Note: do NOT trigger on bare "web" — it matches "web app"/"website" and
     # tempts weak models to fetch instead of build.
-    if any(w in lower for w in ("http://", "https://", "url", "fetch the", "fetch this",
-                                "documentation", "api reference", "look up online", "from the web")):
+    if any(
+        w in lower
+        for w in (
+            "http://",
+            "https://",
+            "url",
+            "fetch the",
+            "fetch this",
+            "documentation",
+            "api reference",
+            "look up online",
+            "from the web",
+        )
+    ):
         names.add("web_fetch")
-    if any(w in lower for w in ("search the web", "search online", "google", "find online",
-                                "search for info", "look up online", "what is the latest")):
+    if any(
+        w in lower
+        for w in (
+            "search the web",
+            "search online",
+            "google",
+            "find online",
+            "search for info",
+            "look up online",
+            "what is the latest",
+        )
+    ):
         names.add("web_search")
-    if any(w in lower for w in ("type text", "type this", "click on", "click at", "mouse click",
-                                "press key", "press enter", "press cmd", "press ctrl",
-                                "screenshot", "screen capture", "take a screenshot",
-                                "keyboard automation", "mouse automation")):
+    if any(
+        w in lower
+        for w in (
+            "type text",
+            "type this",
+            "click on",
+            "click at",
+            "mouse click",
+            "press key",
+            "press enter",
+            "press cmd",
+            "press ctrl",
+            "screenshot",
+            "screen capture",
+            "take a screenshot",
+            "keyboard automation",
+            "mouse automation",
+        )
+    ):
         names |= {"type_text", "key_press", "mouse_click", "screenshot"}
     return [t for t in TOOL_DEFINITIONS if t["function"]["name"] in names]
 
@@ -108,40 +249,41 @@ def _select_tools(message: str) -> list[dict]:
 # ── Intent heuristics ─────────────────────────────────────────────────────────
 
 _CHAT_RE = re.compile(
-    r'^(?:'
-    r'hi|hello|hey|yo|sup|howdy|'
-    r'thanks|thank you|ty|thx|'
-    r'ok|okay|sure|yep|yeah|nope|nah|'
-    r'bye|goodbye|'
-    r'good|great|nice|cool|awesome|perfect|got it|sounds good|makes sense|'
-    r'what is\b|what are\b|what\'s\b|'
-    r'who is\b|who are\b|'
-    r'why is\b|why does\b|why do\b|'
-    r'how does\b|how do\b|how is\b|how are\b|'
-    r'explain\b|tell me\b|can you explain\b|'
-    r'what do you\b|what\'s the difference\b|'
-    r'lol|haha|hehe'
-    r')',
+    r"^(?:"
+    r"hi|hello|hey|yo|sup|howdy|"
+    r"thanks|thank you|ty|thx|"
+    r"ok|okay|sure|yep|yeah|nope|nah|"
+    r"bye|goodbye|"
+    r"good|great|nice|cool|awesome|perfect|got it|sounds good|makes sense|"
+    r"what is\b|what are\b|what\'s\b|"
+    r"who is\b|who are\b|"
+    r"why is\b|why does\b|why do\b|"
+    r"how does\b|how do\b|how is\b|how are\b|"
+    r"explain\b|tell me\b|can you explain\b|"
+    r"what do you\b|what\'s the difference\b|"
+    r"lol|haha|hehe"
+    r")",
     re.I,
 )
 
 _HAS_TASK = re.compile(
     r'(?:^|[\s"])/[\w./]+'
-    r'|\b[\w./\-]+\.(?:py|js|ts|dart|go|rs|rb|java|kt|tsx|jsx|vue|'
-    r'yaml|yml|json|toml|md|sh|css|html|swift|cs|cpp|c|h)\b'
-    r'|\b(?:'
-    r'file|folder|dir(?:ectory)?|create|make|edit|update|fix|refactor|'
-    r'read|write|delete|remove|rename|move|copy|'
-    r'run|execute|install|build|compile|test|commit|push|'
-    r'search|find|grep|implement|add|generate|scaffold|'
-    r'debug|open|script|code|program|function|class|module|'
-    r'fetch|download|deploy|click|type|screenshot'
-    r')\b',
+    r"|\b[\w./\-]+\.(?:py|js|ts|dart|go|rs|rb|java|kt|tsx|jsx|vue|"
+    r"yaml|yml|json|toml|md|sh|css|html|swift|cs|cpp|c|h)\b"
+    r"|\b(?:"
+    r"file|folder|dir(?:ectory)?|create|make|edit|update|fix|refactor|"
+    r"read|write|delete|remove|rename|move|copy|"
+    r"run|execute|install|build|compile|test|commit|push|"
+    r"search|find|grep|implement|add|generate|scaffold|"
+    r"debug|open|script|code|program|function|class|module|"
+    r"fetch|download|deploy|click|type|screenshot"
+    r")\b",
     re.I,
 )
 
 # The only escape sequences JSON permits after a backslash inside a string.
 _VALID_JSON_ESCAPES = set('"\\/bfnrtu')
+
 
 def _sanitize_json_block(block: str) -> str:
     """Repair the not-quite-valid JSON that local models emit so json.loads
@@ -154,7 +296,7 @@ def _sanitize_json_block(block: str) -> str:
         common reason a model's text tool call fails to parse."""
     out: list[str] = []
     in_str = False
-    esc = False          # previous char was a backslash, awaiting its escapee
+    esc = False  # previous char was a backslash, awaiting its escapee
     for c in block:
         if in_str:
             if esc:
@@ -184,7 +326,7 @@ def _sanitize_json_block(block: str) -> str:
             out.append(c)
             if c == '"':
                 in_str = True
-    if esc:           # trailing lone backslash at end of block — drop it
+    if esc:  # trailing lone backslash at end of block — drop it
         pass
     return "".join(out)
 
@@ -194,26 +336,31 @@ _HEREDOC_RE = re.compile(
     re.S,
 )
 
+
 def _extract_heredoc_calls(content: str, valid_names: set[str]) -> tuple[str, list[dict]]:
     """Parse shell-heredoc style tool calls some models emit:
-        create_file path <<EOF
-        ...content...
-        EOF
+    create_file path <<EOF
+    ...content...
+    EOF
     """
     calls: list[dict] = []
+
     def _repl(m: "re.Match") -> str:
         name = m.group(1)
         if name == "write_file":
             name = "create_file"
         if name not in valid_names:
             return m.group(0)
-        path, body = m.group(2).strip().strip('"\''), m.group(4)
-        calls.append({
-            "id": f"hd_{len(calls)}",
-            "name": name,
-            "input": {"path": path, "content": body},
-        })
+        path, body = m.group(2).strip().strip("\"'"), m.group(4)
+        calls.append(
+            {
+                "id": f"hd_{len(calls)}",
+                "name": name,
+                "input": {"path": path, "content": body},
+            }
+        )
         return ""
+
     cleaned = _HEREDOC_RE.sub(_repl, content)
     return cleaned, calls
 
@@ -269,9 +416,10 @@ def _extract_text_tool_calls(content: str, valid_names: set[str]) -> tuple[str, 
         if depth != 0:
             break  # unbalanced — stop scanning
 
-        block = content[i:j + 1]
+        block = content[i : j + 1]
         try:
             import json as _json
+
             obj = _json.loads(_sanitize_json_block(block))
         except (ValueError, TypeError):
             i += 1
@@ -288,16 +436,19 @@ def _extract_text_tool_calls(content: str, valid_names: set[str]) -> tuple[str, 
                 if isinstance(args, str):
                     try:
                         import json as _json2
+
                         args = _json2.loads(args)
                     except (ValueError, TypeError):
                         args = {}
                 if not isinstance(args, dict):
                     args = {}
-                calls.append({
-                    "id": f"text_{uuid.uuid4().hex[:8]}",
-                    "name": name,
-                    "input": args,
-                })
+                calls.append(
+                    {
+                        "id": f"text_{uuid.uuid4().hex[:8]}",
+                        "name": name,
+                        "input": args,
+                    }
+                )
                 spans.append((i, j + 1))
         i = j + 1
 
@@ -311,17 +462,17 @@ def _extract_text_tool_calls(content: str, valid_names: set[str]) -> tuple[str, 
         cleaned_parts.append(content[last:])
         cleaned = "".join(cleaned_parts)
         # Tidy leftover fences/whitespace
-        cleaned = re.sub(r'```(?:json|tool_code)?\s*```', '', cleaned)
-        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned).strip()
+        cleaned = re.sub(r"```(?:json|tool_code)?\s*```", "", cleaned)
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
         return cleaned, calls
 
     return content, []
 
 
-_THINK_BLOCK_RE = re.compile(r'<think>.*?</think>', re.DOTALL)
+_THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 # Some models use other delimiters for chain-of-thought; treat them the same.
-_THINK_OPEN_RE = re.compile(r'<think>|<thinking>|◁think▷', re.I)
-_THINK_CLOSE_RE = re.compile(r'</think>|</thinking>|◁/think▷', re.I)
+_THINK_OPEN_RE = re.compile(r"<think>|<thinking>|◁think▷", re.I)
+_THINK_CLOSE_RE = re.compile(r"</think>|</thinking>|◁/think▷", re.I)
 
 
 def _strip_reasoning(text: str) -> str:
@@ -335,18 +486,18 @@ def _strip_reasoning(text: str) -> str:
                                      monologue into the reply)
         <think>… (no close yet)      unclosed block mid-stream — nothing to show
     """
-    text = _THINK_BLOCK_RE.sub('', text)
+    text = _THINK_BLOCK_RE.sub("", text)
     # A dangling close tag means everything before it was hidden reasoning that
     # never got an opening tag — drop up to and including the last close tag.
     m = None
     for m in _THINK_CLOSE_RE.finditer(text):
         pass
     if m:
-        text = text[m.end():]
+        text = text[m.end() :]
     # An unclosed opening tag means we're still mid-reasoning — drop from it on.
     om = _THINK_OPEN_RE.search(text)
     if om:
-        text = text[:om.start()]
+        text = text[: om.start()]
     return text.strip()
 
 
@@ -368,9 +519,10 @@ def _needs_tools(message: str) -> bool:
         return False
     return True
 
+
 def _is_real_plan(text: str) -> bool:
     """True only when the model wrote a genuine numbered list (2+ steps)."""
-    items = re.findall(r'(?:^|\n)\s*[1-9]\d*[.)]\s+\w', text)
+    items = re.findall(r"(?:^|\n)\s*[1-9]\d*[.)]\s+\w", text)
     return len(items) >= 2
 
 
@@ -378,16 +530,16 @@ def _is_real_plan(text: str) -> bool:
 # to a question (explain/what/how...). Used to detect the #1 local-model failure:
 # the model *describes* the work or dumps code in chat but never calls a tool.
 _ACTION_REQUEST = re.compile(
-    r'\b(create|creat|make|making|build|add|implement|writ|generat|scaffold|'
-    r'set ?up|fix|refactor|rename|delete|remove|update|edit|run|install|deploy|'
-    r'organi[sz]e|move|copy|sort|put|place|convert|rewrite|replace|split|merge|'
-    r'extract|download|configure|format|clean|optimi[sz]e|append|insert|mark|'
-    r'change|modify|migrate|rename|wrap|commit|push|execute)\b',
+    r"\b(create|creat|make|making|build|add|implement|writ|generat|scaffold|"
+    r"set ?up|fix|refactor|rename|delete|remove|update|edit|run|install|deploy|"
+    r"organi[sz]e|move|copy|sort|put|place|convert|rewrite|replace|split|merge|"
+    r"extract|download|configure|format|clean|optimi[sz]e|append|insert|mark|"
+    r"change|modify|migrate|rename|wrap|commit|push|execute)\b",
     re.I,
 )
 _EXPLAIN_REQUEST = re.compile(
-    r'^\s*(explain|what|what\'s|how|why|who|when|where|describe|tell me|'
-    r'can you explain|show me how|is |are |does |do |should )',
+    r"^\s*(explain|what|what\'s|how|why|who|when|where|describe|tell me|"
+    r"can you explain|show me how|is |are |does |do |should )",
     re.I,
 )
 
@@ -429,27 +581,43 @@ def _talked_instead_of_acting(user_input: str, content: str) -> bool:
 # not the generic "you only talked" nudge.
 _TOOLCALL_SHAPE_RE = re.compile(r'"(?:name|tool|function)"\s*:\s*"([a-zA-Z_][\w]*)"')
 
+
 def _has_unparsed_tool_call(content: str, valid_names: set[str]) -> bool:
     if not content or "{" not in content:
         return False
     return any(m.group(1) in valid_names for m in _TOOLCALL_SHAPE_RE.finditer(content))
 
+
 # Substrings that indicate a retryable, transient provider failure
 _TRANSIENT_MARKERS = (
-    "429", "500", "502", "503", "504",
-    "timeout", "timed out", "connect", "overloaded",
-    "temporarily", "rate limit", "read error", "remote protocol",
-    "model output error", "both be empty",  # Ollama sometimes returns empty output
+    "429",
+    "500",
+    "502",
+    "503",
+    "504",
+    "timeout",
+    "timed out",
+    "connect",
+    "overloaded",
+    "temporarily",
+    "rate limit",
+    "read error",
+    "remote protocol",
+    "model output error",
+    "both be empty",  # Ollama sometimes returns empty output
 )
+
 
 def _is_transient(err: str) -> bool:
     low = err.lower()
     return any(m in low for m in _TRANSIENT_MARKERS)
 
+
 MAX_RETRIES = 2
 
 
 # ── ESC-to-cancel helper ──────────────────────────────────────────────────────
+
 
 class _CancelFlag:
     """Thread-safe ESC-to-cancel during streaming.
@@ -463,6 +631,7 @@ class _CancelFlag:
     stop() still joins the thread and restores the terminal synchronously
     before any panels are printed.
     """
+
     def __init__(self):
         self.cancelled = False
         self._thread = None
@@ -471,6 +640,7 @@ class _CancelFlag:
 
     def start_listening(self):
         import threading
+
         self.cancelled = False
         try:
             self._fd = sys.stdin.fileno()
@@ -489,7 +659,7 @@ class _CancelFlag:
             tty.setcbreak(self._fd, termios.TCSANOW)
             while not self.cancelled:
                 if select.select([sys.stdin], [], [], 0.1)[0]:
-                    if sys.stdin.read(1) == '\x1b':  # ESC
+                    if sys.stdin.read(1) == "\x1b":  # ESC
                         self.cancelled = True
                         break
         except Exception:
@@ -508,8 +678,8 @@ class _CancelFlag:
         self.cancelled = True
         t, self._thread = self._thread, None
         if t is not None:
-            t.join(timeout=0.3)      # wait for the listener to leave raw mode
-        self._restore()              # guarantee cooked mode before any printing
+            t.join(timeout=0.3)  # wait for the listener to leave raw mode
+        self._restore()  # guarantee cooked mode before any printing
 
 
 # ── Permission helpers ────────────────────────────────────────────────────────
@@ -517,32 +687,43 @@ class _CancelFlag:
 # Read-only tools are safe (and sometimes sensible) to repeat verbatim, so the
 # stuck-loop guard ignores them; it only fires on state-changing calls.
 _READONLY_TOOLS = {
-    "read_file", "list_files", "search_files", "grep_ast", "repo_map",
-    "git_status", "git_diff", "web_fetch", "web_search",
+    "read_file",
+    "list_files",
+    "search_files",
+    "grep_ast",
+    "repo_map",
+    "git_status",
+    "git_diff",
+    "web_fetch",
+    "web_search",
 }
 
 _AUTO_APPROVE_TOOLS = {
-    "read_file", "list_files", "search_files",
-    "git_status", "git_diff",
-    "grep_ast",      # read-only symbol search
-    "web_fetch",     # read-only URL fetch
-    "web_search",    # read-only web search
-    "update_memory", # user's own persistent notes
-    "repo_map",      # read-only codebase index
+    "read_file",
+    "list_files",
+    "search_files",
+    "git_status",
+    "git_diff",
+    "grep_ast",  # read-only symbol search
+    "web_fetch",  # read-only URL fetch
+    "web_search",  # read-only web search
+    "update_memory",  # user's own persistent notes
+    "repo_map",  # read-only codebase index
 }
 
 _TOOL_ACTION_LABELS = {
-    "edit_file":        "Edit file",
-    "create_file":      "Create file",
+    "edit_file": "Edit file",
+    "create_file": "Create file",
     "create_directory": "Create directory",
-    "run_command":      "Run command",
-    "git_commit":       "Git commit",
-    "run_tests":        "Run test suite",
-    "type_text":        "Type text (keyboard)",
-    "key_press":        "Press keys",
-    "mouse_click":      "Mouse click",
-    "screenshot":       "Take screenshot",
+    "run_command": "Run command",
+    "git_commit": "Git commit",
+    "run_tests": "Run test suite",
+    "type_text": "Type text (keyboard)",
+    "key_press": "Press keys",
+    "mouse_click": "Mouse click",
+    "screenshot": "Take screenshot",
 }
+
 
 def _format_permission_detail(tool_name: str, args: dict) -> str:
     if tool_name in ("edit_file", "create_file", "create_directory"):
@@ -558,6 +739,7 @@ def _format_permission_detail(tool_name: str, args: dict) -> str:
 
 # ── Streaming status display ──────────────────────────────────────────────────
 
+
 class _StreamStatus:
     """Phase spinner shown while the model generates.
 
@@ -567,12 +749,13 @@ class _StreamStatus:
     by print_kai_message after streaming finishes. self.raw is still accumulated
     so the phase can read as 'Thinking' while the model is inside a <think> block.
     """
+
     _PHASES = ["Thinking", "Reasoning", "Deciphering", "Processing"]
 
     def __init__(self, label: str = "") -> None:
         self._start = time.monotonic()
         self._label = label
-        self.raw = ""            # live-updated with the accumulated response
+        self.raw = ""  # live-updated with the accumulated response
 
     def _elapsed(self) -> int:
         return int(time.monotonic() - self._start)
@@ -599,16 +782,18 @@ class _StreamStatus:
         _, thinking = self._visible()
         elapsed = self._elapsed()
         phase = self._label or (
-            "Thinking" if thinking
-            else self._PHASES[min(elapsed // 6, len(self._PHASES) - 1)]
+            "Thinking" if thinking else self._PHASES[min(elapsed // 6, len(self._PHASES) - 1)]
         )
         return self._header(phase)
 
 
 # ── Main application ──────────────────────────────────────────────────────────
 
+
 class KaiApp:
-    def __init__(self, config: KaiConfig, provider_name: str | None = None, model: str | None = None) -> None:
+    def __init__(
+        self, config: KaiConfig, provider_name: str | None = None, model: str | None = None
+    ) -> None:
         self.config = config
         self.provider_name = provider_name or config.default_provider
         try:
@@ -619,10 +804,15 @@ class KaiApp:
             print_info(f"'{self.provider_name}' unavailable ({e}); falling back to ollama.")
             self.provider_name = "ollama"
             self.provider = get_provider("ollama", config)
-        self.model = model or config.get_provider(self.provider_name).default_model or self._default_model()
+        self.model = (
+            model or config.get_provider(self.provider_name).default_model or self._default_model()
+        )
         self.cwd = os.getcwd()
         self.session = Session(
-            name="", provider=self.provider_name, model=self.model, cwd=self.cwd,
+            name="",
+            provider=self.provider_name,
+            model=self.model,
+            cwd=self.cwd,
         )
         self.project_info = detect_project(self.cwd)
         self.tool_registry = ToolRegistry(cwd=self.cwd)
@@ -631,7 +821,7 @@ class KaiApp:
         self._cost: float = 0.0
         self._always_allowed: set[str] = set()
         self._tools_disabled: bool = False
-        self.checkpoints = CheckpointStack()   # undo/redo of agent file changes
+        self.checkpoints = CheckpointStack()  # undo/redo of agent file changes
 
     def _default_model(self) -> str:
         defaults = {
@@ -664,7 +854,7 @@ class KaiApp:
         """Resolve a possibly-relative tool path against the session cwd."""
         return str((Path(self.cwd) / path).expanduser())
 
-    _MENTION_RE = re.compile(r'(?:^|\s)@([^\s@]+)')
+    _MENTION_RE = re.compile(r"(?:^|\s)@([^\s@]+)")
 
     @staticmethod
     def _clip(text: str, limit: int, rel_path: str) -> str:
@@ -676,9 +866,8 @@ class KaiApp:
         if len(text) <= limit:
             return text
         return (
-            text[:limit]
-            + f"\n\n… [TRUNCATED — showing first {limit} of {len(text)} chars of "
-            f"{rel_path}. This is NOT the full file. Call read_file(\"{rel_path}\") "
+            text[:limit] + f"\n\n… [TRUNCATED — showing first {limit} of {len(text)} chars of "
+            f'{rel_path}. This is NOT the full file. Call read_file("{rel_path}") '
             f"to get the exact, complete contents before editing it.]"
         )
 
@@ -687,12 +876,11 @@ class KaiApp:
         unlike the fuzzy auto-detect; takes precedence when present."""
         found: dict[str, str] = {}
         for raw in self._MENTION_RE.findall(text):
-            cand = raw.rstrip('.,;:!?)')
+            cand = raw.rstrip(".,;:!?)")
             p = (Path(self.cwd) / cand).expanduser()
             try:
                 if p.is_file() and p.stat().st_size < 200_000:
-                    found[cand] = self._clip(
-                        p.read_text("utf-8", errors="replace"), 8000, cand)
+                    found[cand] = self._clip(p.read_text("utf-8", errors="replace"), 8000, cand)
             except Exception:
                 pass
         return list(found.items())
@@ -703,20 +891,22 @@ class KaiApp:
         MAX_CHARS = 2500
         found: dict[str, str] = {}
 
-        backtick  = re.findall(r'`([^`]+)`', user_input)
+        backtick = re.findall(r"`([^`]+)`", user_input)
         file_refs = re.findall(
-            r'\b([\w./\-]+\.(?:py|js|ts|dart|go|rs|rb|java|kt|swift|tsx|jsx|vue|css|yaml|yml|json|toml|md))\b',
-            user_input
+            r"\b([\w./\-]+\.(?:py|js|ts|dart|go|rs|rb|java|kt|swift|tsx|jsx|vue|css|yaml|yml|json|toml|md))\b",
+            user_input,
         )
         sym_refs = re.findall(
             r'(?:in|the|function|class|method|def|fix|update|edit|read|check|look at)\s+["\']?([\w_]{3,})["\']?',
-            user_input, re.I
+            user_input,
+            re.I,
         )
         # Drop common English words — searching the repo for "the"/"this"/"file"
         # matches almost everything (especially README), which is why unrelated
         # tasks kept auto-loading README.md. Keep only identifier-looking tokens.
         sym_refs = [
-            s for s in sym_refs
+            s
+            for s in sym_refs
             if s.lower() not in _STOPWORD_SYMS
             and (any(c.isupper() for c in s[1:]) or "_" in s or len(s) >= 6)
         ]
@@ -724,17 +914,19 @@ class KaiApp:
         def _read(rel_path: str) -> str | None:
             p = Path(self.cwd) / rel_path
             if p.is_file() and p.stat().st_size < 200_000:
-                return self._clip(
-                    p.read_text("utf-8", errors="replace"), MAX_CHARS, rel_path)
+                return self._clip(p.read_text("utf-8", errors="replace"), MAX_CHARS, rel_path)
             return None
 
         def _search_and_read(pattern: str, use_regex: bool = False) -> None:
             if len(found) >= MAX_FILES:
                 return
             try:
-                data = json.loads(self.tool_registry.call("search_files", {
-                    "pattern": pattern, "use_regex": use_regex, "max_results": 2
-                }))
+                data = json.loads(
+                    self.tool_registry.call(
+                        "search_files",
+                        {"pattern": pattern, "use_regex": use_regex, "max_results": 2},
+                    )
+                )
                 for r in data.get("results", []):
                     fp = r["file"]
                     if fp not in found:
@@ -745,7 +937,7 @@ class KaiApp:
             except Exception:
                 pass
 
-        for candidate in (backtick + file_refs):
+        for candidate in backtick + file_refs:
             if len(found) >= MAX_FILES:
                 break
             content = _read(candidate)
@@ -794,12 +986,12 @@ class KaiApp:
         if relevant:
             names = ", ".join(p for p, _ in relevant)
             print_info(f"Auto-loaded: {names}")
-            ctx = "\n\n".join(f"<file path=\"{p}\">\n{c}\n</file>" for p, c in relevant)
+            ctx = "\n\n".join(f'<file path="{p}">\n{c}\n</file>' for p, c in relevant)
             augmented = (
                 f"{user_input}\n\n"
                 '<auto_context note="These files were attached automatically by '
                 "KaiCode's relevance search. The user did NOT paste or provide "
-                'them, and they may be truncated — call read_file for complete '
+                "them, and they may be truncated — call read_file for complete "
                 'contents.">\n'
                 f"{ctx}\n</auto_context>"
             )
@@ -812,9 +1004,9 @@ class KaiApp:
         system_prompt = self._system_prompt()
 
         cancel = _CancelFlag()
-        tools_nudged = False   # have we already pushed the model to actually act?
-        did_act = False        # did ANY tool execute during this turn?
-        last_action_key = None # last state-changing call, to catch stuck loops
+        tools_nudged = False  # have we already pushed the model to actually act?
+        did_act = False  # did ANY tool execute during this turn?
+        last_action_key = None  # last state-changing call, to catch stuck loops
 
         for iteration in range(MAX_TOOL_ITERATIONS):
             assistant_content = ""
@@ -846,7 +1038,7 @@ class KaiApp:
                     stream = self.provider.stream_chat(
                         messages=trimmed_messages,
                         model=self.model,
-                        system=system_prompt,   # reused, not rebuilt
+                        system=system_prompt,  # reused, not rebuilt
                         tools=active_tools,
                     )
                     async for chunk in stream:
@@ -857,13 +1049,14 @@ class KaiApp:
                             if assistant_content.strip():
                                 print_kai_message(assistant_content.strip() + "\n\n⚡ *cancelled*")
                                 self.session.messages.append(
-                                    Message(role="assistant", content=assistant_content))
+                                    Message(role="assistant", content=assistant_content)
+                                )
                             else:
                                 print_info("Cancelled.")
                             return
                         if chunk.content:
                             assistant_content += chunk.content
-                            status.raw = assistant_content   # live-stream to screen
+                            status.raw = assistant_content  # live-stream to screen
                         if chunk.tool_call:
                             pending_tool_calls.append(chunk.tool_call)
                         if chunk.usage:
@@ -877,7 +1070,9 @@ class KaiApp:
                     err = str(e)
                     if "does not support tools" in err.lower():
                         self._tools_disabled = True
-                        print_info(f"'{self.model}' doesn't support native tools — using text-based tool calls.")
+                        print_info(
+                            f"'{self.model}' doesn't support native tools — using text-based tool calls."
+                        )
                         # Don't return — just retry this iteration without native tools
                         active_tools = None
                         status = _StreamStatus(label)
@@ -897,10 +1092,16 @@ class KaiApp:
                             print_error("No Ollama models installed. Run: ollama pull llama3.2")
                         return
                     # Retry only transient failures that happened before any output
-                    if (_is_transient(err) and not assistant_content
-                            and not pending_tool_calls and attempt < MAX_RETRIES):
+                    if (
+                        _is_transient(err)
+                        and not assistant_content
+                        and not pending_tool_calls
+                        and attempt < MAX_RETRIES
+                    ):
                         wait = 1.5 * (attempt + 1)
-                        print_info(f"Transient error — retrying in {wait:.0f}s ({attempt + 1}/{MAX_RETRIES})…")
+                        print_info(
+                            f"Transient error — retrying in {wait:.0f}s ({attempt + 1}/{MAX_RETRIES})…"
+                        )
                         await asyncio.sleep(wait)
                         status = _StreamStatus("Retrying")
                         live = Live(status, console=console, transient=True, refresh_per_second=10)
@@ -910,7 +1111,7 @@ class KaiApp:
                     return
 
             live.stop()
-            cancel.stop()   # leave raw mode BEFORE any panel/printing this turn
+            cancel.stop()  # leave raw mode BEFORE any panel/printing this turn
             if not stream_ok:
                 return
 
@@ -934,8 +1135,10 @@ class KaiApp:
                 if text_calls:
                     assistant_content = cleaned
                     # Merge, skipping any that duplicate a native call
-                    seen = {(c.get("name"), json.dumps(c.get("input"), sort_keys=True))
-                            for c in pending_tool_calls}
+                    seen = {
+                        (c.get("name"), json.dumps(c.get("input"), sort_keys=True))
+                        for c in pending_tool_calls
+                    }
                     for c in text_calls:
                         key = (c.get("name"), json.dumps(c.get("input"), sort_keys=True))
                         if key not in seen:
@@ -959,22 +1162,29 @@ class KaiApp:
                 _all_names = {t["function"]["name"] for t in TOOL_DEFINITIONS}
                 malformed_call = _has_unparsed_tool_call(assistant_content, _all_names)
 
-                if (needs_tools and not tools_nudged
-                        and (malformed_call
-                             or (not did_act
-                                 and _talked_instead_of_acting(user_input, assistant_content)))):
+                if (
+                    needs_tools
+                    and not tools_nudged
+                    and (
+                        malformed_call
+                        or (
+                            not did_act and _talked_instead_of_acting(user_input, assistant_content)
+                        )
+                    )
+                ):
                     tools_nudged = True
                     if assistant_content:
                         print_kai_message(assistant_content)
                         self.session.messages.append(
-                            Message(role="assistant", content=assistant_content))
+                            Message(role="assistant", content=assistant_content)
+                        )
                     if malformed_call:
                         nudge = (
                             "Your last message contained a tool call written as JSON "
                             "text, but it was NOT valid JSON, so it could not be "
                             "executed and nothing happened. The usual cause is "
-                            "unescaped characters inside a string value — every \" "
-                            "inside a value must be written \\\", every newline \\n, "
+                            'unescaped characters inside a string value — every " '
+                            'inside a value must be written \\", every newline \\n, '
                             "and every backslash \\\\ (this bites when `content`/"
                             "`new_content` holds code, quotes, or triple-quotes). "
                             "Re-issue the call NOW. Strongly prefer the native "
@@ -998,23 +1208,31 @@ class KaiApp:
                     continue
                 if assistant_content:
                     print_kai_message(assistant_content)
-                    self.session.messages.append(Message(role="assistant", content=assistant_content))
+                    self.session.messages.append(
+                        Message(role="assistant", content=assistant_content)
+                    )
                 break
 
             # ── Plan detection: only interrupt for real numbered plans ──────
             if assistant_content and iteration == 0 and _is_real_plan(assistant_content):
                 print_plan(assistant_content)
                 console.print()
-                console.print(Text("  Proceed with this plan? [Y/n]: ", style="bold kaicode.warning"), end="")
+                console.print(
+                    Text("  Proceed with this plan? [Y/n]: ", style="bold kaicode.warning"), end=""
+                )
                 try:
                     answer = await asyncio.get_event_loop().run_in_executor(None, input)
                 except (KeyboardInterrupt, EOFError):
                     console.print()
-                    self.session.messages.append(Message(role="assistant", content=assistant_content))
+                    self.session.messages.append(
+                        Message(role="assistant", content=assistant_content)
+                    )
                     return
                 if answer.strip().lower() in ("n", "no"):
                     print_info("Plan cancelled.")
-                    self.session.messages.append(Message(role="assistant", content=assistant_content))
+                    self.session.messages.append(
+                        Message(role="assistant", content=assistant_content)
+                    )
                     return
             elif assistant_content:
                 # Short preamble before tool calls — show it, don't block
@@ -1027,23 +1245,30 @@ class KaiApp:
 
             # ── Store ONE assistant message holding the text + all tool calls
             tool_calls_payload = [
-                {"id": tc.get("id", ""), "type": "function",
-                 "function": {"name": tc.get("name", ""),
-                              "arguments": json.dumps(tc.get("input", {}))}}
+                {
+                    "id": tc.get("id", ""),
+                    "type": "function",
+                    "function": {
+                        "name": tc.get("name", ""),
+                        "arguments": json.dumps(tc.get("input", {})),
+                    },
+                }
                 for tc in pending_tool_calls
             ]
-            self.session.messages.append(Message(
-                role="assistant",
-                content=assistant_content,
-                tool_calls=tool_calls_payload,
-            ))
+            self.session.messages.append(
+                Message(
+                    role="assistant",
+                    content=assistant_content,
+                    tool_calls=tool_calls_payload,
+                )
+            )
 
             # ── Execute each tool call, append a result per call ────────────
             console.print()
             for tc in pending_tool_calls:
                 tool_name = tc.get("name", "")
                 tool_args = tc.get("input", {})
-                tool_id   = tc.get("id", "")
+                tool_id = tc.get("id", "")
 
                 # ── Stuck-loop guard ────────────────────────────────────────
                 # If the model repeats the EXACT same state-changing call it just
@@ -1053,18 +1278,23 @@ class KaiApp:
                 # unaffected: those keys differ, so this only trips true repeats.)
                 action_key = f"{tool_name}:{json.dumps(tool_args, sort_keys=True)}"
                 if tool_name not in _READONLY_TOOLS and action_key == last_action_key:
-                    result = json.dumps({
-                        "error": "Duplicate call — you just ran this exact same "
-                        "operation and nothing changed in between, so the result is "
-                        "identical. Repeating it will not help. Either try a "
-                        "DIFFERENT command/approach, fix the underlying problem "
-                        "first, or stop and report what you found.",
-                    })
+                    result = json.dumps(
+                        {
+                            "error": "Duplicate call — you just ran this exact same "
+                            "operation and nothing changed in between, so the result is "
+                            "identical. Repeating it will not help. Either try a "
+                            "DIFFERENT command/approach, fix the underlying problem "
+                            "first, or stop and report what you found.",
+                        }
+                    )
                     print_error("Skipped a repeated identical call (stuck-loop guard)")
-                    self.session.messages.append(Message(
-                        role="tool", content=result,
-                        tool_results=[{"tool_use_id": tool_id, "content": result}],
-                    ))
+                    self.session.messages.append(
+                        Message(
+                            role="tool",
+                            content=result,
+                            tool_results=[{"tool_use_id": tool_id, "content": result}],
+                        )
+                    )
                     continue
 
                 is_write = tool_name in ("edit_file", "create_file")
@@ -1076,7 +1306,9 @@ class KaiApp:
                 if is_write and tool_name not in self._always_allowed:
                     print_change_preview(tool_name, tool_args, self.cwd)
 
-                approved = await self._request_permission(tool_name, tool_args, reason=assistant_content.strip())
+                approved = await self._request_permission(
+                    tool_name, tool_args, reason=assistant_content.strip()
+                )
                 if not approved:
                     result = json.dumps({"error": "User denied this action."})
                 else:
@@ -1084,8 +1316,7 @@ class KaiApp:
                     # Tools do blocking file IO / subprocesses (run_command can
                     # take 30s) — run them in a worker thread so the event loop
                     # stays responsive.
-                    result = await asyncio.to_thread(
-                        self.tool_registry.call, tool_name, tool_args)
+                    result = await asyncio.to_thread(self.tool_registry.call, tool_name, tool_args)
                     print_tool_result(tool_name, result)
 
                 if is_write:
@@ -1099,17 +1330,23 @@ class KaiApp:
                             after = CheckpointStack.snapshot(saved_path)
                             self.checkpoints.record(saved_path, before, after, tool_name)
                             verify_err = await asyncio.to_thread(
-                                self._verify_file, tool_args.get("path", ""))
+                                self._verify_file, tool_args.get("path", "")
+                            )
                             if verify_err:
                                 print_error("Syntax check failed — feeding error back to model")
                                 console.print(Text(f"  {verify_err}", style="kaicode.error"))
-                                result = json.dumps({**rdata, "syntax_error": verify_err,
-                                    "note": "File saved but has a syntax error (see "
-                                    "syntax_error). Fix it by RE-CREATING the whole file "
-                                    "correctly with create_file (it overwrites). Do NOT "
-                                    "patch it with edit_file/replace_all — that tends to "
-                                    "corrupt the file. Write the complete corrected "
-                                    "content in ONE create_file call."})
+                                result = json.dumps(
+                                    {
+                                        **rdata,
+                                        "syntax_error": verify_err,
+                                        "note": "File saved but has a syntax error (see "
+                                        "syntax_error). Fix it by RE-CREATING the whole file "
+                                        "correctly with create_file (it overwrites). Do NOT "
+                                        "patch it with edit_file/replace_all — that tends to "
+                                        "corrupt the file. Write the complete corrected "
+                                        "content in ONE create_file call.",
+                                    }
+                                )
                             else:
                                 print_success("Syntax OK")
                     except json.JSONDecodeError:
@@ -1128,22 +1365,26 @@ class KaiApp:
                     except (ValueError, TypeError):
                         did_act = True
 
-                self.session.messages.append(Message(
-                    role="tool", content=result,
-                    tool_results=[{"tool_use_id": tool_id, "content": result}],
-                ))
+                self.session.messages.append(
+                    Message(
+                        role="tool",
+                        content=result,
+                        tool_results=[{"tool_use_id": tool_id, "content": result}],
+                    )
+                )
 
     def _verify_file(self, path: str) -> str | None:
         import subprocess, sys
+
         ext = Path(path).suffix.lower()
         checks: dict[str, list[str]] = {
-            ".py":   [sys.executable, "-m", "py_compile", path],
-            ".js":   ["node", "--check", path],
-            ".ts":   ["node", "--check", path],
+            ".py": [sys.executable, "-m", "py_compile", path],
+            ".js": ["node", "--check", path],
+            ".ts": ["node", "--check", path],
             ".dart": ["dart", "analyze", "--fatal-infos", path],
-            ".go":   ["go", "vet", path],
-            ".rb":   ["ruby", "-c", path],
-            ".sh":   ["bash", "-n", path],
+            ".go": ["go", "vet", path],
+            ".rb": ["ruby", "-c", path],
+            ".sh": ["bash", "-n", path],
         }
         cmd = checks.get(ext)
         if not cmd:
@@ -1161,7 +1402,7 @@ class KaiApp:
         if tool_name in _AUTO_APPROVE_TOOLS or tool_name in self._always_allowed:
             return True
 
-        label  = _TOOL_ACTION_LABELS.get(tool_name, tool_name)
+        label = _TOOL_ACTION_LABELS.get(tool_name, tool_name)
         detail = _format_permission_detail(tool_name, tool_args)
 
         body = Text()
@@ -1179,14 +1420,24 @@ class KaiApp:
             body.append(f"{short}\n", style="dim white")
 
         body.append("\n")
-        body.append("  1. ", style="bold green");   body.append("Yes, do it\n")
-        body.append("  2. ", style="bold red");     body.append("No, skip\n")
-        body.append("  3. ", style="bold cyan");    body.append(f"Yes, always allow '{tool_name}'\n")
-        body.append("  4. ", style="bold magenta"); body.append("Yes, allow ALL tools this session\n")
+        body.append("  1. ", style="bold green")
+        body.append("Yes, do it\n")
+        body.append("  2. ", style="bold red")
+        body.append("No, skip\n")
+        body.append("  3. ", style="bold cyan")
+        body.append(f"Yes, always allow '{tool_name}'\n")
+        body.append("  4. ", style="bold magenta")
+        body.append("Yes, allow ALL tools this session\n")
 
         console.print()
-        console.print(Panel(body, title="[bold kaicode.warning] Permission required [/]",
-                            border_style="kaicode.warning", padding=(0, 1)))
+        console.print(
+            Panel(
+                body,
+                title="[bold kaicode.warning] Permission required [/]",
+                border_style="kaicode.warning",
+                padding=(0, 1),
+            )
+        )
         console.print(Text("  Choose [1/2/3/4]: ", style="bold kaicode.assistant"), end="")
 
         try:
@@ -1219,10 +1470,12 @@ class KaiApp:
         self.print_header()
 
     async def switch_provider(self, provider_name: str, model: str | None = None) -> None:
-        await self.provider.aclose()   # close the old pooled HTTP client
+        await self.provider.aclose()  # close the old pooled HTTP client
         self.provider_name = provider_name
         self.provider = get_provider(provider_name, self.config)
-        self.model = model or self.config.get_provider(provider_name).default_model or self._default_model()
+        self.model = (
+            model or self.config.get_provider(provider_name).default_model or self._default_model()
+        )
         self.session.provider = provider_name
         self.session.model = self.model
         self._tools_disabled = False
@@ -1248,8 +1501,11 @@ class KaiApp:
         if ch is None:
             print_info("Nothing to undo.")
             return
-        verb = {"created": "Removed created", "deleted": "Restored deleted",
-                "edited": "Reverted"}.get(ch.label, "Reverted")
+        verb = {
+            "created": "Removed created",
+            "deleted": "Restored deleted",
+            "edited": "Reverted",
+        }.get(ch.label, "Reverted")
         print_success(f"{verb} {self._rel(ch.path)}")
 
     def redo(self) -> None:
@@ -1285,6 +1541,8 @@ class KaiApp:
             self.print_header()
         except FileNotFoundError:
             print_error(f"Session not found: {name}")
+        except ValueError as e:
+            print_error(str(e))
 
     def _record_usage(self, usage: dict) -> None:
         p = usage.get("prompt_tokens", 0)
@@ -1336,7 +1594,9 @@ class KaiApp:
                 print_info(f"Could not verify goal automatically: {result['error']}")
                 return
             if result.get("passed"):
-                print_success(f"Goal verified — test suite passed (attempt {attempt}/{max_attempts}).")
+                print_success(
+                    f"Goal verified — test suite passed (attempt {attempt}/{max_attempts})."
+                )
                 return
 
             print_error(f"Tests still failing after attempt {attempt}/{max_attempts}.")
@@ -1350,8 +1610,10 @@ class KaiApp:
                 "Analyze the failures, fix the code with your tools, and run "
                 "run_tests again until everything passes."
             )
-        print_error(f"Goal not reached within {max_attempts} attempts. "
-                    "Review the test output above or continue interactively.")
+        print_error(
+            f"Goal not reached within {max_attempts} attempts. "
+            "Review the test output above or continue interactively."
+        )
 
     # ── AI commit message ──────────────────────────────────────────────────
     async def ai_commit(self) -> None:
@@ -1371,8 +1633,7 @@ class KaiApp:
 
         diff = ""
         for staged in (True, False):
-            raw = await asyncio.to_thread(
-                self.tool_registry.call, "git_diff", {"staged": staged})
+            raw = await asyncio.to_thread(self.tool_registry.call, "git_diff", {"staged": staged})
             try:
                 diff += json.loads(raw).get("diff", "")
             except (ValueError, TypeError):
@@ -1399,7 +1660,9 @@ class KaiApp:
         try:
             stream = self.provider.stream_chat(
                 messages=[Message(role="user", content=prompt)],
-                model=self.model, system="", tools=None,
+                model=self.model,
+                system="",
+                tools=None,
             )
             async for chunk in stream:
                 if chunk.content:
@@ -1420,10 +1683,21 @@ class KaiApp:
             return
 
         console.print()
-        console.print(Panel(Text(message), title="[bold kaicode.assistant] Commit message [/]",
-                            border_style="kaicode.separator", padding=(0, 1)))
-        console.print(Text("  Commit ALL changes with this message? [Y/n/e(dit)]: ",
-                           style="bold kaicode.warning"), end="")
+        console.print(
+            Panel(
+                Text(message),
+                title="[bold kaicode.assistant] Commit message [/]",
+                border_style="kaicode.separator",
+                padding=(0, 1),
+            )
+        )
+        console.print(
+            Text(
+                "  Commit ALL changes with this message? [Y/n/e(dit)]: ",
+                style="bold kaicode.warning",
+            ),
+            end="",
+        )
         try:
             answer = await asyncio.get_event_loop().run_in_executor(None, input)
         except (KeyboardInterrupt, EOFError):
@@ -1444,8 +1718,8 @@ class KaiApp:
                 message = edited.strip()
 
         result_raw = await asyncio.to_thread(
-            self.tool_registry.call, "git_commit",
-            {"message": message, "add_all": True})
+            self.tool_registry.call, "git_commit", {"message": message, "add_all": True}
+        )
         try:
             result = json.loads(result_raw)
         except (ValueError, TypeError):

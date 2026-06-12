@@ -44,15 +44,13 @@ class KaiConfig:
 
     def _load_global(self) -> None:
         if GLOBAL_CONFIG_FILE.exists():
-            with open(GLOBAL_CONFIG_FILE) as f:
-                data = yaml.safe_load(f) or {}
+            data = _read_yaml_config(GLOBAL_CONFIG_FILE, "global config")
             self._apply_dict(data)
 
     def _load_project(self) -> None:
         project_file = Path.cwd() / PROJECT_CONFIG_FILE
         if project_file.is_file():
-            with open(project_file) as f:
-                data = yaml.safe_load(f) or {}
+            data = _read_yaml_config(project_file, "project config")
             self._apply_dict(data)
 
     def _apply_env(self) -> None:
@@ -94,8 +92,11 @@ class KaiConfig:
                     p.base_url = pdata["base_url"]
                 if "default_model" in pdata:
                     p.default_model = pdata["default_model"]
-                p.extra = {k: v for k, v in pdata.items()
-                           if k not in ("api_key", "base_url", "default_model")}
+                p.extra = {
+                    k: v
+                    for k, v in pdata.items()
+                    if k not in ("api_key", "base_url", "default_model")
+                }
 
     def save_global(self) -> None:
         GLOBAL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -160,3 +161,14 @@ def create_default_config() -> None:
         }
         with open(GLOBAL_CONFIG_FILE, "w") as f:
             yaml.dump(default, f, default_flow_style=False)
+
+
+def _read_yaml_config(path: Path, label: str) -> dict[str, Any]:
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Invalid {label}: fix the YAML syntax.") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid {label}: expected a YAML mapping.")
+    return data

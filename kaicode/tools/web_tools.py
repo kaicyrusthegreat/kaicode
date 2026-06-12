@@ -42,8 +42,11 @@ def web_fetch(url: str, max_chars: int = 6000) -> dict[str, Any]:
 
     try:
         import httpx
+
         resp = httpx.get(
-            url, timeout=20, follow_redirects=True,
+            url,
+            timeout=20,
+            follow_redirects=True,
             headers={"User-Agent": "KaiCode/1.0 (developer assistant)"},
         )
         resp.raise_for_status()
@@ -60,9 +63,9 @@ def web_fetch(url: str, max_chars: int = 6000) -> dict[str, Any]:
 
         text = text[:max_chars]
         return {
-            "url":     url,
+            "url": url,
             "content": text,
-            "length":  len(text),
+            "length": len(text),
             "truncated": len(resp.text) > max_chars,
         }
     except Exception as e:

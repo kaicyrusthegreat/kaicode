@@ -16,8 +16,8 @@ from pathlib import Path
 @dataclass
 class Change:
     path: str
-    before: str | None   # None  → file did not exist before (it was created)
-    after: str | None    # None  → file was removed by the change
+    before: str | None  # None  → file did not exist before (it was created)
+    after: str | None  # None  → file was removed by the change
     tool: str
     ts: float = field(default_factory=time.time)
 
@@ -51,7 +51,7 @@ class CheckpointStack:
         if before == after:
             return
         self._undo.append(Change(path, before, after, tool))
-        self._redo.clear()   # a new change invalidates the redo branch
+        self._redo.clear()  # a new change invalidates the redo branch
 
     @staticmethod
     def _restore(path: str, content: str | None) -> None:
