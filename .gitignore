@@ -14,3 +14,20 @@ dist/
 *.egg-info/
 .DS_Store
 chat_history/
+
+# Local Sessions
+sessions/
+workspace_state/
+memory_store/
+.claude/
+
+# Internal Development
+scrub.py
+scripts/performance_probe.py
+*_AUDIT.md
+*_REPORT.md
+RELEASE_*.md
+SECURITY_*.md
+ROLLBACK.md
+PUBLISHING.md
+replacements.txt
