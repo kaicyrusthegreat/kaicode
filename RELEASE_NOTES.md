@@ -1,7 +1,7 @@
 # Release Notes Draft
 
 Version: 2.2.0
-Status: Draft, not approved
+Status: Draft, release-candidate validation passed
 
 ## Highlights
 
@@ -13,9 +13,10 @@ Status: Draft, not approved
 
 ## Release Status
 
-Local build, package, test, and audit checks pass. This release is still blocked
-until GitHub Actions CI passes on supported Python versions and multi-OS install
-smoke tests complete.
+Local build, package, test, and audit checks pass. GitHub Actions run
+27392894480 passed on Python 3.10, 3.11, 3.12, and Linux/macOS/Windows install
+smoke jobs. Public publishing is still gated on the tagged GitHub release and
+maintainer confirmation of PyPI ownership/credentials.
 
 ## Known Issues
 
