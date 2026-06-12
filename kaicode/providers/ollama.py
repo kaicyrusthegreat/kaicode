@@ -19,9 +19,14 @@ class OllamaProvider(BaseProvider):
     # for speed/cost: cap output length, shrink the context window, lower
     # temperature, or keep the model resident longer.
     _OPTION_KEYS = (
-        "num_predict",      # max tokens to GENERATE (output cap)
-        "num_ctx",          # context window size (smaller = faster prompt eval)
-        "temperature", "top_p", "top_k", "repeat_penalty", "seed", "stop",
+        "num_predict",  # max tokens to GENERATE (output cap)
+        "num_ctx",  # context window size (smaller = faster prompt eval)
+        "temperature",
+        "top_p",
+        "top_k",
+        "repeat_penalty",
+        "seed",
+        "stop",
     )
 
     # Models whose reasoning ("thinking") phase can be turned off via the
@@ -99,8 +104,8 @@ class OllamaProvider(BaseProvider):
                     # and retry once so reasoning models still work.
                     if "think" in payload and "think" in body.lower():
                         async for chunk in self.stream_chat(
-                            messages, model, system, tools,
-                            **{**kwargs, "_drop_think": True}):
+                            messages, model, system, tools, **{**kwargs, "_drop_think": True}
+                        ):
                             yield chunk
                         return
                     raise ProviderError(f"Ollama error {response.status_code}: {body}")

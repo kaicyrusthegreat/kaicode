@@ -42,11 +42,11 @@ def run_tests(
         )
         output = (result.stdout + result.stderr).strip()
         return {
-            "command":    command,
+            "command": command,
             "returncode": result.returncode,
-            "passed":     result.returncode == 0,
-            "output":     output[:6000],
-            "truncated":  len(output) > 6000,
+            "passed": result.returncode == 0,
+            "output": output[:6000],
+            "truncated": len(output) > 6000,
         }
     except subprocess.TimeoutExpired:
         return {"error": f"Tests timed out after {timeout}s", "command": command}
@@ -60,18 +60,18 @@ def _detect_test_command(root: Path) -> str:
     # that may resolve to a different environment or not be on PATH.
     pytest_cmd = f"{_python()} -m pytest --tb=short -q"
     checks = [
-        (["pytest.ini", "conftest.py"],                          pytest_cmd),
-        (["pyproject.toml"],                                     pytest_cmd),
-        (["setup.py", "tests"],                                  pytest_cmd),
-        (["pubspec.yaml"],                                       "flutter test"),
-        (["go.mod"],                                             "go test ./..."),
-        (["Cargo.toml"],                                         "cargo test"),
-        (["package.json"],                                       "npm test --if-present"),
-        (["Gemfile"],                                            "bundle exec rspec"),
-        (["pom.xml"],                                            "mvn test -q"),
-        (["build.gradle"],                                       "./gradlew test"),
-        (["build.gradle.kts"],                                   "./gradlew test"),
-        (["mix.exs"],                                            "mix test"),
+        (["pytest.ini", "conftest.py"], pytest_cmd),
+        (["pyproject.toml"], pytest_cmd),
+        (["setup.py", "tests"], pytest_cmd),
+        (["pubspec.yaml"], "flutter test"),
+        (["go.mod"], "go test ./..."),
+        (["Cargo.toml"], "cargo test"),
+        (["package.json"], "npm test --if-present"),
+        (["Gemfile"], "bundle exec rspec"),
+        (["pom.xml"], "mvn test -q"),
+        (["build.gradle"], "./gradlew test"),
+        (["build.gradle.kts"], "./gradlew test"),
+        (["mix.exs"], "mix test"),
     ]
     for markers, cmd in checks:
         if any((root / m).exists() for m in markers):
@@ -85,6 +85,7 @@ def _detect_test_command(root: Path) -> str:
 
 def _python() -> str:
     import sys
+
     return sys.executable or "python3"
 
 

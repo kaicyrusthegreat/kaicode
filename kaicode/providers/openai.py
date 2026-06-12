@@ -29,18 +29,22 @@ class OpenAIProvider(BaseProvider):
             if m.role == "tool":
                 # Tool result — must carry tool_call_id to link back to the call
                 tcid = m.tool_results[0]["tool_use_id"] if m.tool_results else ""
-                msgs.append({
-                    "role": "tool",
-                    "tool_call_id": tcid,
-                    "content": m.content,
-                })
+                msgs.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tcid,
+                        "content": m.content,
+                    }
+                )
             elif m.role == "assistant" and m.tool_calls:
                 # Assistant turn that issued tool calls — content may be empty
-                msgs.append({
-                    "role": "assistant",
-                    "content": m.content or None,
-                    "tool_calls": m.tool_calls,
-                })
+                msgs.append(
+                    {
+                        "role": "assistant",
+                        "content": m.content or None,
+                        "tool_calls": m.tool_calls,
+                    }
+                )
             else:
                 msgs.append({"role": m.role, "content": m.content})
         return msgs
@@ -141,11 +145,13 @@ class OpenAIProvider(BaseProvider):
                                 inp = json.loads(tc["input_str"])
                             except json.JSONDecodeError:
                                 inp = {}
-                            yield StreamChunk(tool_call={
-                                "id": tc["id"],
-                                "name": tc["name"],
-                                "input": inp,
-                            })
+                            yield StreamChunk(
+                                tool_call={
+                                    "id": tc["id"],
+                                    "name": tc["name"],
+                                    "input": inp,
+                                }
+                            )
 
         except httpx.ConnectError:
             raise ProviderError("Cannot connect to OpenAI API.")
@@ -161,8 +167,11 @@ class OpenAIProvider(BaseProvider):
             )
             if response.status_code == 200:
                 data = response.json()
-                models = [m["id"] for m in data.get("data", [])
-                          if "gpt" in m["id"] or "o1" in m["id"] or "o3" in m["id"]]
+                models = [
+                    m["id"]
+                    for m in data.get("data", [])
+                    if "gpt" in m["id"] or "o1" in m["id"] or "o3" in m["id"]
+                ]
                 return sorted(models)
         except httpx.ConnectError:
             pass

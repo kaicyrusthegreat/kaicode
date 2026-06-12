@@ -8,27 +8,48 @@ from pathlib import Path
 from typing import Any
 
 _SKIP_DIRS = {
-    ".git", "__pycache__", "node_modules", ".venv", "venv", ".tox",
-    "dist", "build", ".eggs", ".mypy_cache", ".pytest_cache", ".next",
+    ".git",
+    "__pycache__",
+    "node_modules",
+    ".venv",
+    "venv",
+    ".tox",
+    "dist",
+    "build",
+    ".eggs",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".next",
 }
 _SOURCE_EXT = {
-    ".py", ".js", ".ts", ".tsx", ".jsx", ".dart", ".go", ".rs",
-    ".rb", ".java", ".kt", ".swift", ".vue",
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".dart",
+    ".go",
+    ".rs",
+    ".rb",
+    ".java",
+    ".kt",
+    ".swift",
+    ".vue",
 }
 
 # Regex symbol extractors for non-Python languages
 _DEF_PATTERNS = {
-    ".js":   r'^\s*(?:export\s+)?(?:async\s+)?(?:function|class)\s+(\w+)',
-    ".ts":   r'^\s*(?:export\s+)?(?:async\s+)?(?:function|class|interface|type|enum)\s+(\w+)',
-    ".tsx":  r'^\s*(?:export\s+)?(?:async\s+)?(?:function|class|const)\s+(\w+)',
-    ".jsx":  r'^\s*(?:export\s+)?(?:async\s+)?(?:function|class|const)\s+(\w+)',
-    ".dart": r'^\s*(?:class|mixin|enum)\s+(\w+)',
-    ".go":   r'^\s*func\s+(?:\([^)]*\)\s*)?(\w+)|^\s*type\s+(\w+)',
-    ".rs":   r'^\s*(?:pub\s+)?(?:fn|struct|enum|trait)\s+(\w+)',
-    ".rb":   r'^\s*(?:def|class|module)\s+(\w+)',
-    ".java": r'^\s*(?:public|private|protected)?\s*(?:class|interface|enum)\s+(\w+)',
-    ".kt":   r'^\s*(?:fun|class|object|interface)\s+(\w+)',
-    ".swift":r'^\s*(?:func|class|struct|enum|protocol)\s+(\w+)',
+    ".js": r"^\s*(?:export\s+)?(?:async\s+)?(?:function|class)\s+(\w+)",
+    ".ts": r"^\s*(?:export\s+)?(?:async\s+)?(?:function|class|interface|type|enum)\s+(\w+)",
+    ".tsx": r"^\s*(?:export\s+)?(?:async\s+)?(?:function|class|const)\s+(\w+)",
+    ".jsx": r"^\s*(?:export\s+)?(?:async\s+)?(?:function|class|const)\s+(\w+)",
+    ".dart": r"^\s*(?:class|mixin|enum)\s+(\w+)",
+    ".go": r"^\s*func\s+(?:\([^)]*\)\s*)?(\w+)|^\s*type\s+(\w+)",
+    ".rs": r"^\s*(?:pub\s+)?(?:fn|struct|enum|trait)\s+(\w+)",
+    ".rb": r"^\s*(?:def|class|module)\s+(\w+)",
+    ".java": r"^\s*(?:public|private|protected)?\s*(?:class|interface|enum)\s+(\w+)",
+    ".kt": r"^\s*(?:fun|class|object|interface)\s+(\w+)",
+    ".swift": r"^\s*(?:func|class|struct|enum|protocol)\s+(\w+)",
 }
 
 
@@ -38,7 +59,7 @@ def _python_symbols(text: str) -> list[str]:
     except SyntaxError:
         return []
     syms = []
-    for node in tree.body:   # top-level only — keeps it compact
+    for node in tree.body:  # top-level only — keeps it compact
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             syms.append(f"{node.name}()")
         elif isinstance(node, ast.ClassDef):
@@ -92,8 +113,11 @@ def repo_map(path: str = ".", max_chars: int = 4000) -> dict[str, Any]:
                     text = item.read_text("utf-8", errors="replace")
                 except Exception:
                     continue
-                syms = (_python_symbols(text) if item.suffix == ".py"
-                        else _regex_symbols(text, item.suffix))
+                syms = (
+                    _python_symbols(text)
+                    if item.suffix == ".py"
+                    else _regex_symbols(text, item.suffix)
+                )
                 rel = item.relative_to(root)
                 line = f"{rel}: {', '.join(syms[:12])}" if syms else f"{rel}"
                 entries.append(line)
@@ -101,8 +125,8 @@ def repo_map(path: str = ".", max_chars: int = 4000) -> dict[str, Any]:
 
     walk(root)
     return {
-        "root":      str(root),
-        "files":     len(entries),
-        "map":       "\n".join(entries)[:max_chars],
+        "root": str(root),
+        "files": len(entries),
+        "map": "\n".join(entries)[:max_chars],
         "truncated": total >= max_chars,
     }

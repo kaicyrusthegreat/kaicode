@@ -21,6 +21,7 @@ from rich.text import Text
 from rich import box
 
 from kaicode.config import KaiConfig, create_default_config
+from kaicode.logging_config import configure_logging
 from kaicode.ui.display import (
     console,
     print_splash,
@@ -34,45 +35,53 @@ from kaicode.ui.display import (
 )
 from kaicode.ui.theme import (
     KAICODE_THEME,
-    PT_PROMPT, PT_TEXT, PT_PROVIDER, PT_MODEL, PT_MUTED, PT_HINT, PT_SEP,
+    PT_PROMPT,
+    PT_TEXT,
+    PT_PROVIDER,
+    PT_MODEL,
+    PT_MUTED,
+    PT_HINT,
+    PT_SEP,
 )
 from kaicode.session import Session, SESSIONS_DIR
 
 
 HISTORY_FILE = Path.home() / ".kaicode" / "history"
 
-PT_STYLE = PTStyle.from_dict({
-    "prompt":         f"fg:{PT_PROMPT} bold",
-    "":               f"fg:{PT_TEXT}",
-    "bottom-toolbar": "noreverse",
-    "completion-menu":                "bg:#1e1e2e fg:#cdd6f4",
-    "completion-menu.completion":     "bg:#1e1e2e fg:#cdd6f4",
-    "completion-menu.completion.current": f"bg:#45475a fg:{PT_PROMPT} bold",
-    "completion-menu.meta":           "fg:#6c7086 italic",
-    "completion-menu.meta.current":   "fg:#a6e3a1 italic",
-})
+PT_STYLE = PTStyle.from_dict(
+    {
+        "prompt": f"fg:{PT_PROMPT} bold",
+        "": f"fg:{PT_TEXT}",
+        "bottom-toolbar": "noreverse",
+        "completion-menu": "bg:#1e1e2e fg:#cdd6f4",
+        "completion-menu.completion": "bg:#1e1e2e fg:#cdd6f4",
+        "completion-menu.completion.current": f"bg:#45475a fg:{PT_PROMPT} bold",
+        "completion-menu.meta": "fg:#6c7086 italic",
+        "completion-menu.meta.current": "fg:#a6e3a1 italic",
+    }
+)
 
 
 # ── Slash command completer ───────────────────────────────────────────────────
 
 _SLASH_COMMANDS = [
-    ("/model",    "Switch model — shows picker if no name given"),
+    ("/model", "Switch model — shows picker if no name given"),
     ("/provider", "Switch provider (ollama/openai/openai/groq)"),
-    ("/init",     "Generate a KAICODE.md with project instructions"),
-    ("/commit",   "AI-generated commit message for current changes"),
-    ("/undo",     "Revert the last file change the agent made"),
-    ("/redo",     "Re-apply the last undone change"),
-    ("/changes",  "List file changes made this session"),
-    ("/save",     "Save current conversation"),
-    ("/load",     "Load a saved conversation"),
+    ("/init", "Generate a KAICODE.md with project instructions"),
+    ("/commit", "AI-generated commit message for current changes"),
+    ("/undo", "Revert the last file change the agent made"),
+    ("/redo", "Re-apply the last undone change"),
+    ("/changes", "List file changes made this session"),
+    ("/save", "Save current conversation"),
+    ("/load", "Load a saved conversation"),
     ("/sessions", "List all saved sessions"),
-    ("/diff",     "Show the last applied diff"),
-    ("/context",  "Show auto-detected context files"),
-    ("/memory",   "Show project memory (/memory clear to reset)"),
-    ("/clear",    "Clear conversation history"),
-    ("/status",   "Show tokens, model, and provider"),
-    ("/help",     "Show all commands"),
-    ("/quit",     "Exit KaiCode"),
+    ("/diff", "Show the last applied diff"),
+    ("/context", "Show auto-detected context files"),
+    ("/memory", "Show project memory (/memory clear to reset)"),
+    ("/clear", "Clear conversation history"),
+    ("/status", "Show tokens, model, and provider"),
+    ("/help", "Show all commands"),
+    ("/quit", "Exit KaiCode"),
 ]
 
 
@@ -99,27 +108,32 @@ def _make_toolbar(app):
     Kept to plain text lines (no separators / backgrounds / manual cursor
     tricks) so prompt_toolkit manages the geometry cleanly without ghosting.
     """
+
     def _toolbar():
         from kaicode.pricing import format_cost
-        tok  = f"~{app.tokens_used:,} tok" if app.tokens_used else "0 tok"
+
+        tok = f"~{app.tokens_used:,} tok" if app.tokens_used else "0 tok"
         msgs = len(app.session.messages)
         cost = f"  ·  ~{format_cost(app.cost_estimate)}" if app.cost_estimate > 0 else ""
-        return FormattedText([
-            # Row 1 — live status
-            (f"fg:{PT_MUTED}",         "  ◈  "),
-            (f"fg:{PT_PROVIDER}",      f"{app.provider_name}"),
-            (f"fg:{PT_SEP}",           " / "),
-            (f"fg:{PT_MODEL} bold",    f"{app.model}"),
-            (f"fg:{PT_MUTED}",         f"  ·  {tok}{cost}  ·  {msgs} msgs  ·  by Kai Cyrus"),
-            ("",                       "\n"),
-            # Row 2 — hints
-            (f"fg:{PT_HINT}",          "  ESC"),
-            (f"fg:{PT_MUTED}",         " cancel  ·  "),
-            (f"fg:{PT_HINT}",          "/"),
-            (f"fg:{PT_MUTED}",         " commands  ·  "),
-            (f"fg:{PT_HINT}",          "Ctrl+C"),
-            (f"fg:{PT_MUTED}",         " quit"),
-        ])
+        return FormattedText(
+            [
+                # Row 1 — live status
+                (f"fg:{PT_MUTED}", "  ◈  "),
+                (f"fg:{PT_PROVIDER}", f"{app.provider_name}"),
+                (f"fg:{PT_SEP}", " / "),
+                (f"fg:{PT_MODEL} bold", f"{app.model}"),
+                (f"fg:{PT_MUTED}", f"  ·  {tok}{cost}  ·  {msgs} msgs  ·  by Kai Cyrus"),
+                ("", "\n"),
+                # Row 2 — hints
+                (f"fg:{PT_HINT}", "  ESC"),
+                (f"fg:{PT_MUTED}", " cancel  ·  "),
+                (f"fg:{PT_HINT}", "/"),
+                (f"fg:{PT_MUTED}", " commands  ·  "),
+                (f"fg:{PT_HINT}", "Ctrl+C"),
+                (f"fg:{PT_MUTED}", " quit"),
+            ]
+        )
+
     return _toolbar
 
 
@@ -183,9 +197,9 @@ def run_shell(command: str) -> None:
         return
     import subprocess
     from rich import box
+
     try:
-        r = subprocess.run(command, shell=True, capture_output=True,
-                           text=True, timeout=120)
+        r = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=120)
     except subprocess.TimeoutExpired:
         print_error(f"Command timed out: {command}")
         return
@@ -195,14 +209,16 @@ def run_shell(command: str) -> None:
     out = (r.stdout or "").rstrip()
     err = (r.stderr or "").rstrip()
     ok = r.returncode == 0
-    console.print(Panel(
-        Text(out or "(no output)"),
-        box=box.ROUNDED,
-        title=f"[kaicode.dir]$ {command[:70]}[/]  "
-              f"[{'kaicode.success' if ok else 'kaicode.error'}]rc={r.returncode}[/]",
-        border_style="kaicode.success" if ok else "kaicode.error",
-        padding=(0, 1),
-    ))
+    console.print(
+        Panel(
+            Text(out or "(no output)"),
+            box=box.ROUNDED,
+            title=f"[kaicode.dir]$ {command[:70]}[/]  "
+            f"[{'kaicode.success' if ok else 'kaicode.error'}]rc={r.returncode}[/]",
+            border_style="kaicode.success" if ok else "kaicode.error",
+            padding=(0, 1),
+        )
+    )
     if err:
         console.print(Text(err, style="kaicode.warning"))
 
@@ -214,6 +230,7 @@ async def _init_project(app, overwrite: bool = False) -> None:
         print_info("KAICODE.md already exists — use /init --force to overwrite.")
         return
     import json as _json
+
     try:
         rm = _json.loads(await asyncio.to_thread(app.tool_registry.call, "repo_map", {}))
         repo_map = (rm.get("map", "") or "")[:2500]
@@ -296,13 +313,16 @@ async def handle_command(cmd: str, app) -> None:
             except ValueError as e:
                 print_error(str(e))
         else:
-            print_info("Available providers: ollama, openai, openai, groq, openai_compat, cyrusago")
+            print_info(
+                "Available providers: ollama, openai, openai, groq, openai_compat, cyrusago"
+            )
             print_info(f"Current: {app.provider_name}")
             print_info("Use: /provider <name> [model]")
 
     elif command == "/diff":
         if app.last_diff:
             from kaicode.ui.display import _print_diff
+
             _print_diff(app.last_diff)
         else:
             print_info("No diff available.")
@@ -347,6 +367,7 @@ async def handle_command(cmd: str, app) -> None:
 
     elif command == "/status":
         from kaicode.pricing import format_cost, LOCAL_PROVIDERS
+
         tok = f"~{app.tokens_used:,}" if app.tokens_used else "0"
         if app.provider_name in LOCAL_PROVIDERS:
             cost = "free (local)"
@@ -363,6 +384,7 @@ async def handle_command(cmd: str, app) -> None:
 
     elif command == "/memory":
         from kaicode.tools.memory_tools import read_memory, clear_memory
+
         if args == "clear":
             clear_memory(app.cwd)
             print_success("Project memory cleared.")
@@ -370,6 +392,7 @@ async def handle_command(cmd: str, app) -> None:
             mem = read_memory(app.cwd)
             if mem.strip():
                 from rich.markdown import Markdown
+
                 console.print()
                 console.print(Markdown(mem))
                 console.print()
@@ -391,19 +414,19 @@ async def handle_command(cmd: str, app) -> None:
 
 # Preferred order based on actual KaiCode test results (best first)
 _MODEL_RANK = [
-    "qwen3:8b",           # 🥇 Best overall — reasoning + tool-calling + verification
-    "qwen2.5-coder:7b",   # 🥈 Best for code — specialized, reliable tools
-    "qwen3:4b",           # 🥉 Best bang-for-buck — tiny but full tool support
-    "granite4:3b",        # Smallest model that works flawlessly
-    "gemma4:latest",      # Reliable, clean output
-    "gemma3:4b",          # Fast, compact Google model
-    "llama3.1:8b",        # Solid workhorse
-    "llama3.2:latest",    # Good for chat, weak on tools
-    "phi4:latest",        # Great reasoning, no native tools
-    "gpt-oss:20b",        # Large, slow, no native tools
-    "devstral:latest",    # Heavy — agentic coding
-    "qwen3-coder:latest", # Heavy — advanced coding
-    "deepseek-r1:8b",     # Heavy — step-by-step reasoning
+    "qwen3:8b",  # 🥇 Best overall — reasoning + tool-calling + verification
+    "qwen2.5-coder:7b",  # 🥈 Best for code — specialized, reliable tools
+    "qwen3:4b",  # 🥉 Best bang-for-buck — tiny but full tool support
+    "granite4:3b",  # Smallest model that works flawlessly
+    "gemma4:latest",  # Reliable, clean output
+    "gemma3:4b",  # Fast, compact Google model
+    "llama3.1:8b",  # Solid workhorse
+    "llama3.2:latest",  # Good for chat, weak on tools
+    "phi4:latest",  # Great reasoning, no native tools
+    "gpt-oss:20b",  # Large, slow, no native tools
+    "devstral:latest",  # Heavy — agentic coding
+    "qwen3-coder:latest",  # Heavy — advanced coding
+    "deepseek-r1:8b",  # Heavy — step-by-step reasoning
 ]
 
 
@@ -422,11 +445,11 @@ async def _pick_model(models: list[str], app) -> None:
 
     lines = Text()
     for i, m in enumerate(models, 1):
-        active     = m == app.model
-        num_style  = "bold kaicode.success" if active else "bold kaicode.assistant"
+        active = m == app.model
+        num_style = "bold kaicode.success" if active else "bold kaicode.assistant"
         name_style = "bold kaicode.success" if active else "bold default"
-        desc       = _MODEL_LABELS.get(m, "")
-        tick       = "  ✓  active" if active else ""
+        desc = _MODEL_LABELS.get(m, "")
+        tick = "  ✓  active" if active else ""
 
         # Model number + name
         lines.append(f"\n  {i:>2}.  ", style=num_style)
@@ -440,13 +463,18 @@ async def _pick_model(models: list[str], app) -> None:
             lines.append(f"       {desc}\n", style="kaicode.muted")
 
     console.print()
-    console.print(Panel(
-        lines,
-        title=f"[bold kaicode.logo] Select a model — {app.provider_name} [/]",
-        border_style="kaicode.separator",
-        padding=(0, 1),
-    ))
-    console.print(Text("  Enter number or model name (Enter to cancel): ", style="bold kaicode.assistant"), end="")
+    console.print(
+        Panel(
+            lines,
+            title=f"[bold kaicode.logo] Select a model — {app.provider_name} [/]",
+            border_style="kaicode.separator",
+            padding=(0, 1),
+        )
+    )
+    console.print(
+        Text("  Enter number or model name (Enter to cancel): ", style="bold kaicode.assistant"),
+        end="",
+    )
 
     try:
         answer = await asyncio.get_event_loop().run_in_executor(None, input)
@@ -473,17 +501,26 @@ async def _pick_model(models: list[str], app) -> None:
 @click.option("--model", "-m", default=None, help="Model name")
 @click.option("--session", "-s", default=None, help="Load a saved session")
 @click.option("--config", "-c", "config_path", default=None, help="Path to config file")
-@click.option("--goal", "-g", default=None,
-              help='Goal mode: work autonomously until tests pass, e.g. --goal "make tests pass"')
-@click.option("--attempts", default=5, show_default=True,
-              help="Max attempts in goal mode")
+@click.option(
+    "--goal",
+    "-g",
+    default=None,
+    help='Goal mode: work autonomously until tests pass, e.g. --goal "make tests pass"',
+)
+@click.option("--attempts", default=5, show_default=True, help="Max attempts in goal mode")
+@click.option("--debug", is_flag=True, help="Show debug logs and full tracebacks")
 @click.version_option(version="2.2.0", prog_name="kaicode")
 @click.argument("prompt", nargs=-1)
-def main(provider, model, session, config_path, goal, attempts, prompt):
+def main(provider, model, session, config_path, goal, attempts, debug, prompt):
     """KaiCode — Terminal AI coding assistant.\n\nSupports Ollama, OpenAI, OpenAI, Groq, and any OpenAI-compatible API."""
+    configure_logging(debug)
     create_default_config()
 
-    config = KaiConfig.load()
+    try:
+        config = KaiConfig.load()
+    except ValueError as e:
+        print_error(str(e))
+        sys.exit(2)
 
     from kaicode.app import KaiApp
 
@@ -513,6 +550,12 @@ def main(provider, model, session, config_path, goal, attempts, prompt):
     except KeyboardInterrupt:
         console.print()
         print_info("Interrupted.")
+    except Exception as e:
+        if debug:
+            console.print_exception(show_locals=False)
+        else:
+            print_error("Unexpected error. Re-run with --debug for diagnostic details.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

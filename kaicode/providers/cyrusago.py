@@ -98,9 +98,7 @@ class CyruSagOProvider(BaseProvider):
                 learning_started = True
                 answer = "".join(parts).strip()
                 if task and answer:
-                    asyncio.create_task(
-                        asyncio.to_thread(self._learn, task, answer, lesson_ids)
-                    )
+                    asyncio.create_task(asyncio.to_thread(self._learn, task, answer, lesson_ids))
             yield chunk
 
     async def list_models(self) -> list[str]:

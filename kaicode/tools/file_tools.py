@@ -13,7 +13,7 @@ def read_file(path: str, start_line: int = 0, end_line: int = 0) -> dict[str, An
     """Read a file's contents, optionally a line range."""
     try:
         start_line = int(start_line)
-        end_line   = int(end_line)
+        end_line = int(end_line)
         p = Path(path).expanduser().resolve()
         if not p.exists():
             return {"error": f"File not found: {path}"}
@@ -94,13 +94,15 @@ def edit_file(
 
         updated = original.replace(old_content, new_content, -1 if replace_all else 1)
 
-        diff = list(difflib.unified_diff(
-            original.splitlines(keepends=True),
-            updated.splitlines(keepends=True),
-            fromfile=f"a/{p.name}",
-            tofile=f"b/{p.name}",
-            n=3,
-        ))
+        diff = list(
+            difflib.unified_diff(
+                original.splitlines(keepends=True),
+                updated.splitlines(keepends=True),
+                fromfile=f"a/{p.name}",
+                tofile=f"b/{p.name}",
+                n=3,
+            )
+        )
 
         p.write_text(updated, encoding="utf-8")
         return {
@@ -118,9 +120,11 @@ def edit_file(
 def _no_match_error(original: str, old_content: str) -> str:
     """Build an actionable not-found error, including the closest existing line
     so the model can correct whitespace/typos instead of guessing blindly."""
-    base = ("old_content not found. Match the file's EXACT text including "
-            "indentation and whitespace. Tip: read_file first, then copy the "
-            "lines verbatim.")
+    base = (
+        "old_content not found. Match the file's EXACT text including "
+        "indentation and whitespace. Tip: read_file first, then copy the "
+        "lines verbatim."
+    )
     first_line = next((l for l in old_content.splitlines() if l.strip()), "")
     if not first_line:
         return base
@@ -173,7 +177,7 @@ def list_files(
 ) -> dict[str, Any]:
     """List files in a directory tree."""
     try:
-        depth          = int(depth)
+        depth = int(depth)
         include_hidden = str(include_hidden).lower() not in ("false", "0", "")
         root = Path(path).expanduser().resolve()
         if not root.exists():
@@ -199,9 +203,19 @@ def _walk_tree(
     include_hidden: bool,
 ) -> None:
     IGNORE = {
-        ".git", "__pycache__", "node_modules", ".venv", "venv",
-        ".tox", "dist", "build", ".eggs", "*.egg-info",
-        ".DS_Store", ".mypy_cache", ".pytest_cache",
+        ".git",
+        "__pycache__",
+        "node_modules",
+        ".venv",
+        "venv",
+        ".tox",
+        "dist",
+        "build",
+        ".eggs",
+        "*.egg-info",
+        ".DS_Store",
+        ".mypy_cache",
+        ".pytest_cache",
     }
     if current_depth > max_depth:
         return
@@ -218,11 +232,13 @@ def _walk_tree(
             continue
 
         rel = item.relative_to(root)
-        entries.append({
-            "path": str(rel),
-            "type": "dir" if item.is_dir() else "file",
-            "size": item.stat().st_size if item.is_file() else None,
-        })
+        entries.append(
+            {
+                "path": str(rel),
+                "type": "dir" if item.is_dir() else "file",
+                "size": item.stat().st_size if item.is_file() else None,
+            }
+        )
         if item.is_dir() and current_depth < max_depth:
             _walk_tree(root, item, max_depth, current_depth + 1, entries, include_hidden)
 
