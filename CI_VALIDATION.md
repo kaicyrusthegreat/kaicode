@@ -1,7 +1,7 @@
 # CI Validation
 
 Date: 2026-06-12
-Release candidate: KaiCode 2.2.0
+Release candidate: KaiCode 3.0.0
 Commit: `448c805ed75f82be051a21a78d438f1ada61ea82`
 Workflow run: [27392894480](https://github.com/kaicyrusdgreat/kaicode/actions/runs/27392894480)
 Status: passed

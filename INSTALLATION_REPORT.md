@@ -1,7 +1,7 @@
 # Installation Report
 
 Date: 2026-06-12
-Release candidate: KaiCode 2.2.0
+Release candidate: KaiCode 3.0.0
 
 ## Local macOS Wheel Install
 
@@ -9,13 +9,13 @@ Environment:
 
 - OS: macOS Darwin
 - Python: 3.14.5
-- Wheel: `dist/kaicode-2.2.0-py3-none-any.whl`
-- Smoke venv: `/private/tmp/kaicode-wheel-smoke-20260612`
+- Wheel: `dist/kaicode-3.0.0-py3-none-any.whl`
+- Smoke venv: `/private/tmp/kaicode-wheel-smoke-3.0.0-20260612`
 
 Results:
 
 - Wheel installation: passed.
-- `kaicode --version`: passed, reported `kaicode, version 2.2.0`.
+- `kaicode --version`: passed, reported `kaicode, version 3.0.0`.
 - `kaicode --help`: passed, expected CLI options were present.
 - Config load smoke test: passed using a temporary project `.kaicode` file.
 - Session save/load smoke test: passed using an isolated temporary session directory.

@@ -1,6 +1,6 @@
 # Publishing Process
 
-KaiCode 2.2.0 is approved for release-candidate validation, not public
+KaiCode 3.0.0 is approved for release-candidate validation, not public
 production release, until the final checklist is signed off.
 
 ## Ownership Prerequisites
@@ -25,8 +25,8 @@ make PYTHON=.venv/bin/python release-check
 
 Expected artifacts:
 
-- `dist/kaicode-2.2.0-py3-none-any.whl`
-- `dist/kaicode-2.2.0.tar.gz`
+- `dist/kaicode-3.0.0-py3-none-any.whl`
+- `dist/kaicode-3.0.0.tar.gz`
 - `coverage.xml`
 
 ## Tagging
@@ -35,13 +35,13 @@ Use an annotated tag. Use a signed tag when a configured signing key is
 available.
 
 ```bash
-git tag -a v2.2.0 -m "Release KaiCode 2.2.0"
-git push origin v2.2.0
+git tag -a v3.0.0 -m "Release KaiCode 3.0.0"
+git push origin v3.0.0
 ```
 
 ## GitHub Release
 
-1. Open the release page for `v2.2.0`.
+1. Open the release page for `v3.0.0`.
 2. Paste the contents of `RELEASE_NOTES.md`.
 3. Attach the wheel and source distribution from `dist/`.
 4. Mark the release as latest only after CI and install validation pass.
